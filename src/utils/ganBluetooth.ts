@@ -56,9 +56,9 @@ class GanBluetoothManager {
       const storageKey = `gan_cube_mac_${device.id}`;
       const cachedMac = localStorage.getItem(storageKey);
 
-      if (cachedMac && !isFallbackCall) {
-        return cachedMac;
-      }
+      // The first provider call precedes the library's advertisement lookup.
+      // Only return a cached address here; manual entry belongs to its fallback.
+      if (!isFallbackCall) return cachedMac || null;
 
       // If library requires fallback and prompt callback is provided
       if (callbacks.onMacPrompt) {

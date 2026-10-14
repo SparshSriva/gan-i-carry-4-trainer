@@ -29,13 +29,12 @@ export const MacAddressModal: React.FC<MacAddressModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanMac = mac.trim().toUpperCase().replace(/[^0-9A-F:]/g, '');
-    // Validate roughly XX:XX:XX:XX:XX:XX or XXXXXXXXXXXX
-    if (cleanMac.length < 12) {
+    const hex = mac.trim().toUpperCase().replace(/[:-]/g, '');
+    if (!/^[0-9A-F]{12}$/.test(hex)) {
       setError('Please enter a valid 12-character MAC address (e.g. FD:12:34:56:78:9A)');
       return;
     }
-    onSubmit(cleanMac);
+    onSubmit(hex.match(/.{2}/g)!.join(':'));
   };
 
   return (
@@ -59,13 +58,14 @@ export const MacAddressModal: React.FC<MacAddressModalProps> = ({
         <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-600/40 text-xs text-amber-200">
           <ShieldAlert className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
-            Your browser hides Bluetooth MAC addresses for privacy. <strong>{deviceName}</strong> requires its MAC address to decrypt turns using AES-128.
+            Automatic address lookup was unavailable. <strong>{deviceName}</strong> requires its Bluetooth MAC address to decode turns.
           </div>
         </div>
 
         <p className="text-xs text-zinc-400">
-          You can find your MAC address on the cube's packaging sticker or inside the official CubeStation app settings.
+          On Windows, open <code className="text-zinc-200">chrome://bluetooth-internals/#devices</code> (or <code className="text-zinc-200">edge://bluetooth-internals/#devices</code>), start scanning, wake the cube, and copy its Address. This is the cube’s address, not your computer’s Bluetooth address.
         </p>
+        <p className="text-xs text-zinc-400">For automatic lookup in Chrome, enable <code>chrome://flags/#enable-experimental-web-platform-features</code>, relaunch, and reconnect. Availability depends on the browser and platform. <a href="https://gist.github.com/afedotov/52057533a8b27a0277598160c384ae71" target="_blank" rel="noreferrer" className="text-indigo-300">Library maintainer’s MAC guide</a></p>
 
         {/* Input Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
