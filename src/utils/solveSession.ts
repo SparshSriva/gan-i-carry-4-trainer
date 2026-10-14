@@ -1,9 +1,11 @@
+import type { ScrambleProvenance } from './officialScramble';
 import type { KPuzzle, KPattern } from 'cubing/kpuzzle';
 import { ScrambleAssistant } from './ScrambleAssistant';
 import type { GripOrientation } from './gripOrientation';
 export type SolvePhase = 'scrambling' | 'ready' | 'solving' | 'review';
 export interface SolveMove { move: string; rawMove?: string; timestamp: number; elapsedMs: number }
 export interface SolveRecord {
+  scrambleProvenance?:ScrambleProvenance;
   schemaVersion: 1; id: string; puzzle: '3x3x3'; createdAt: number;
   source: 'simulator' | 'gan' | 'manual'; scramble: string;
   startingGrip: GripOrientation; setupMoves: SolveMove[]; solution: SolveMove[];
@@ -16,17 +18,12 @@ export function validateScramble(value: string): string {
   if (!value.trim() || tokens.length > 200 || tokens.some(m=>!/^[URFDLB][2']?$/.test(m))) throw new Error("Enter 1–200 outer-face scramble moves, such as R U2 F'.");
   return tokens.join(' ');
 }
-export function practiceScramble(length=25): string {
-  const faces='URFDLB', suffix=['',"'",'2'];let previous='';const moves=[];
-  const random=(n:number)=>{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n;};
-  for(let i=0;i<length;i++){let f=faces[random(6)];while(f===previous)f=faces[random(6)];moves.push(f+suffix[random(3)]);previous=f;}return moves.join(' ');
-}
 export class SolveSession {
   phase: SolvePhase='scrambling'; assistant: ScrambleAssistant; pattern: KPattern;
   setupMoves: SolveMove[]=[]; solution: SolveMove[]=[]; readyAt=0; startedAt: number | null=null; result: SolveRecord | null=null;
   setupMethod: SolveRecord['setupMethod']='guided';
   readonly createdAt=Date.now();
-  constructor(readonly puzzle: KPuzzle, readonly scramble: string, readonly grip: GripOrientation, readonly source: SolveRecord['source']) {
+  constructor(readonly puzzle: KPuzzle, readonly scramble: string, readonly grip: GripOrientation, readonly source: SolveRecord['source'],readonly provenance:ScrambleProvenance={kind:'custom'}) {
     this.scramble=validateScramble(scramble);this.pattern=puzzle.defaultPattern();this.assistant=new ScrambleAssistant(this.scramble,()=>{});
   }
   useManualSetup(now=Date.now()): void { this.setupMethod=this.source==='manual'?'manual-confirmed':'virtual-applied';this.pattern=this.puzzle.defaultPattern().applyAlg(this.scramble);this.phase='ready';this.readyAt=now; }
@@ -47,7 +44,7 @@ export class SolveSession {
   finish(now=Date.now(), termination: SolveRecord['termination']='manual'): SolveRecord | null {
     if(this.phase!=='solving' || this.startedAt===null || this.result)return null;
     this.phase='review';
-    this.result={schemaVersion:1,id:crypto.randomUUID(),puzzle:'3x3x3',createdAt:this.createdAt,source:this.source,scramble:this.scramble,setupMethod:this.setupMethod,startingGrip:{...this.grip},setupMoves:[...this.setupMoves],solution:[...this.solution],durationMs:Math.max(0,now-this.startedAt),inspectionMs:Math.max(0,this.startedAt-this.readyAt),solved:termination==='solved',termination};
+    this.result={schemaVersion:1,id:crypto.randomUUID(),puzzle:'3x3x3',createdAt:this.createdAt,source:this.source,scramble:this.scramble,scrambleProvenance:this.provenance,setupMethod:this.setupMethod,startingGrip:{...this.grip},setupMoves:[...this.setupMoves],solution:[...this.solution],durationMs:Math.max(0,now-this.startedAt),inspectionMs:Math.max(0,this.startedAt-this.readyAt),solved:termination==='solved',termination};
     return this.result;
   }
 }

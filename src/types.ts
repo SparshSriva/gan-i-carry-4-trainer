@@ -38,11 +38,32 @@ export type TrainerPhase =
 export type AlgSubset = 'PLL' | 'OLL' | 'F2L';
 export type LearningStatus = 'unlearned' | 'learning' | 'learned';
 
+export interface AlgVariant {
+  id: string;
+  label: string;
+  alg: string;
+  tags: string[];
+  sourceUrl?: string;
+}
+export interface VariantStats {
+  attempts: number; avgRecognitionMs: number; avgExecutionMs: number; mistakeRate: number; lastPracticed?: number;
+}
+export interface TrainingEntry { caseId: string; variantId: string }
+export interface TrainingSession {
+  id: string; name: string; entries: TrainingEntry[]; selection: 'balanced' | 'weighted';
+}
 export interface AlgCase {
   id: string;
   subset: AlgSubset;
   name: string;
-  alg: string;          // primary algorithm string
+  alg: string;          // currently preferred variant
+  group: string;
+  variants: AlgVariant[];
+  preferredVariantId: string;
+  number?: number | string;
+  sourceUrl?: string;
+  sourcePage?: number | null;
+  variantStats?: Record<string, VariantStats>;
   setup?: string;       // optional explicit setup scramble (overrides inverse alg)
   status: LearningStatus;
   attempts: number;
@@ -60,6 +81,12 @@ export interface MoveTimestamp {
 }
 
 export interface AttemptResult {
+  variantId?: string;
+  algorithm?: string;
+  setupAlg?: string;
+  sessionId?: string;
+  startingGrip?: import('./utils/gripOrientation').GripOrientation;
+  moveEvents?: {move:string;timestamp:number;elapsedMs:number}[];
   caseId: string;
   recognitionMs: number;
   executionMs: number;

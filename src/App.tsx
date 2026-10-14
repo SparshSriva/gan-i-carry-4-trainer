@@ -39,7 +39,7 @@ export default function App() {
     deviceName: 'GAN Smart Cube',
   });
 
-  const [state, actions] = useTrainerState(view === 'trainer' && !keybindsOpen && !macModal.isOpen);
+  const [state, actions] = useTrainerState(view === 'trainer' && !keybindsOpen && !macModal.isOpen,grip);
   const timer=useSolveTimer(view==='timer' && !keybindsOpen && !macModal.isOpen,state.simulatorMode,state.keybindPreset,grip);
   const timerRef=useRef(timer);timerRef.current=timer;
   const viewRef=useRef(view);viewRef.current=view;
@@ -132,6 +132,14 @@ export default function App() {
     setMacModal(prev => ({ ...prev, isOpen: false, resolve: undefined }));
   };
 
+  const catalogProps={
+    cases:state.cases,session:state.trainingSession,grip,onGripChange:setGrip,
+    onSelect:(c:import('./types').AlgCase)=>{actions.selectCase(c);setView('trainer');},
+    onNext:()=>{actions.nextCase();setView('trainer');},
+    onToggleEntry:actions.toggleSessionEntry,onAddEntries:actions.addSessionEntries,
+    onSelectionChange:actions.setSessionSelection,onSessionName:actions.setSessionName,
+    onPreferVariant:actions.preferVariant,onStatusChange:actions.updateCaseStatus,onAddVariant:actions.addCustomVariant,
+  };
   const handleNextFromReview = () => {
     actions.nextCase();
   };
@@ -158,6 +166,7 @@ export default function App() {
         {view === 'trainer' && !state.puzzleReady && <p role="status" className="p-6 text-zinc-400">Loading cube engine…</p>}
         {view === 'trainer' && state.puzzleReady && (
           <TrainerView
+            catalogProps={catalogProps}
             phase={state.phase}
             grip={grip}
             onGripChange={setGrip}
@@ -172,6 +181,7 @@ export default function App() {
             onSelectCase={actions.selectCase}
             onNextCase={actions.nextCase}
             onNextFromReview={handleNextFromReview}
+            onBackToSession={actions.syncSolvedState}
             onStatusChange={actions.updateCaseStatus}
             onDismissXp={actions.dismissXpBanner}
             onFeedMove={actions.feedMove}
@@ -180,8 +190,7 @@ export default function App() {
 
         {view==='timer' && <SolveTimerView timer={timer} grip={grip} onGripChange={setGrip} simulator={state.simulatorMode} connected={connectionStatus==='connected'} />}
         {view === 'library' && (
-          <LibraryView cases={state.cases} onStatusChange={actions.updateCaseStatus}
-            onTrain={c => { actions.selectCase(c); setView('trainer'); }} />
+          <LibraryView {...catalogProps}/>
         )}
         {view === 'analytics' && <AnalyticsView cases={state.cases} />}
       </main>

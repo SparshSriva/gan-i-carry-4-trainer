@@ -12,7 +12,7 @@ Updated October 14, 2026. Current implementation and milestone status are record
 - Replace Library and Analytics placeholders with searchable cases and local practice history.
 - Respect weighted practice filters, hide case identity during blind recognition, and calculate XP deterministically.
 - Keep Bluetooth callbacks current and cache MAC addresses per device.
-- Verify production build, lint, 25 regression tests, and the documented browser acceptance flows.
+- Verify production build, lint, 29 regression tests, and the documented browser acceptance flows.
 
 ## Next: physical cube reliability
 
@@ -25,7 +25,7 @@ Acceptance: hardware and virtual state agree across a connection, a full practic
 
 ## Next: training catalog and practice workflow
 
-Audit standard case classification before expanding to all 57 OLL and 41 F2L cases. Add multiple learning-status filters, manual queue selection, random AUF, custom algorithm editing, and local backup/export. Distinguish physical-turn TPS from algorithm metrics consistently across simulator and hardware input.
+Complete an independent standard-case classification audit of the sourced 41 F2L / 57 OLL / 21 PLL catalog. Grouped browsing, 272 alternates, custom alternates, preferred variants, manual sessions, balanced cycles, and adaptive variant weighting are implemented. Next: random AUF, multi-status selection, session backup/import, algorithm annotations, and explicit hardware-compatible practice. Distinguish physical-turn TPS from algorithm metrics consistently across simulator and hardware input.
 
 ## Long term: camera orientation in place of a gyroscope
 
@@ -47,4 +47,4 @@ Static up/front frame remapping is implemented and tested for all 24 orientation
 
 The general Solve Timer now saves scramble/solution reconstructions, supports local replay/JSON export, and displays best/mean/ao5/ao12. Snapped starting grip drives GAN face mapping. Public comparison and next priorities are recorded in [TRAINER_COMPARISON.md](./docs/TRAINER_COMPARISON.md).
 
-Next timer work: official random-state scrambles, +2/DNF editing with an audit trail, optional inspection rules, session grouping, solution annotations, import validation, and CFOP/fluency splits computed from saved move/state sequences. Future AI assistance should operate on a versioned reconstruction with clear input provenance and request user consent before transmitting records to an external service.
+Official TNoodle-WCA random-state generation is implemented through the local signed runtime. Next timer work: +2/DNF editing with an audit trail, optional inspection rules, session grouping, solution annotations, import validation, and CFOP/fluency splits computed from saved move/state sequences. Future AI assistance should operate on a versioned reconstruction with clear input provenance and request user consent before transmitting records to an external service.

@@ -1,0 +1,12 @@
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { startTNoodle } from './tnoodle-runtime.mjs';
+const java=await startTNoodle();
+console.log('Official TNoodle-WCA scramble service ready on loopback port 2014.');
+const preview=process.argv.includes('--preview');
+const args=process.argv.slice(2).filter(a=>a!=='--preview');
+const vite=spawn(process.execPath,[fileURLToPath(new URL('../node_modules/vite/bin/vite.js',import.meta.url)),...(preview?['preview']:[]),'--host','127.0.0.1',...args],{windowsHide:true,stdio:'inherit'});
+let stopped=false;
+const stop=()=>{if(stopped)return;stopped=true;vite.kill();java?.kill();};
+process.on('SIGINT',stop);process.on('SIGTERM',stop);
+vite.on('exit',code=>{stop();process.exitCode=code??0;});

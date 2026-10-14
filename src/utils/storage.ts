@@ -17,10 +17,13 @@ export function loadCases(): AlgCase[] {
     const raw = localStorage.getItem(CASES_KEY);
     if (!raw) return ALL_CASES;
     const saved: Record<string, Partial<AlgCase>> = JSON.parse(raw);
-    return ALL_CASES.map(base => ({
-      ...base,
-      ...(saved[base.id] ?? {}),
-    }));
+    return ALL_CASES.map(base => {
+      const record=saved[base.id] ?? {};
+      const custom=(record.variants ?? []).filter(v=>v.id.startsWith('custom-'));
+      const variants=[...base.variants,...custom];
+      const selected=variants.find(v=>v.id===record.preferredVariantId) ?? variants[0];
+      return { ...base, ...record, variants, alg:selected.alg, preferredVariantId:selected.id };
+    });
   } catch {
     return ALL_CASES;
   }
@@ -31,6 +34,9 @@ export function saveCases(cases: AlgCase[]): void {
   for (const c of cases) {
     map[c.id] = {
       status: c.status,
+      preferredVariantId: c.preferredVariantId,
+      variants: c.variants.filter(v=>v.id.startsWith('custom-')),
+      variantStats: c.variantStats,
       attempts: c.attempts,
       lastPracticed: c.lastPracticed,
       avgRecognitionMs: c.avgRecognitionMs,
@@ -71,10 +77,20 @@ export function updateCaseStats(
   return cases.map(c => {
     if (c.id !== result.caseId) return c;
     const n = c.attempts + 1;
-    const alpha = 0.2; // exponential moving average weight
+    const alpha = 0.2;
+    const variantId=result.variantId;
+    const prior=variantId?c.variantStats?.[variantId]:undefined;
+    const variantStats=variantId?{...c.variantStats,[variantId]:{
+      attempts:(prior?.attempts ?? 0)+1,
+      avgRecognitionMs:prior?prior.avgRecognitionMs*0.8+result.recognitionMs*0.2:result.recognitionMs,
+      avgExecutionMs:prior?prior.avgExecutionMs*0.8+result.executionMs*0.2:result.executionMs,
+      mistakeRate:prior?prior.mistakeRate*0.8+Number(hadMistake)*0.2:Number(hadMistake),
+      lastPracticed:result.timestamp,
+    }}:c.variantStats; // exponential moving average weight
     return {
       ...c,
       attempts: n,
+      variantStats,
       lastPracticed: result.timestamp,
       avgRecognitionMs: c.attempts === 0
         ? result.recognitionMs

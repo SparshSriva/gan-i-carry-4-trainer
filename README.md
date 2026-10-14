@@ -9,12 +9,12 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use desktop Chrome or Edge for Web Bluetooth. The app also works without hardware in keyboard simulator mode.
+Install Java 17+ first. The launcher downloads the pinned official TNoodle-WCA 1.2.3 runtime (about 32 MB), verifies its SHA-256, and starts it on loopback port 2014. `npm run setup:scrambles` can prepare the runtime separately. `npm run preview` also starts the helper; a static deployment needs a companion TNoodle API. Open the local URL printed by Vite. Use desktop Chrome or Edge for Web Bluetooth. The app also works without hardware in keyboard simulator mode.
 
 ## Practice
 
-1. Start with a solved cube, white on top and green in front.
-2. Select a case, or choose a subset/learning-status filter and use Random Next for a weighted practice queue.
+1. Start with a solved cube and choose the matching up/front solving frame.
+2. Browse F2L / OLL / PLL sections, select preferred alternates, and add individual algorithms or the visible section to a training session. Choose balanced cycles or adaptive weighting, then start training.
 3. Follow the setup moves. If you make a mistake, undo the correction queue shown on screen.
 4. Recognize the case and execute. The first turn starts execution timing; the attempt completes when the tracked cube is solved.
 5. Review the recognition/execution split, TPS, and pause bars. Use the Analytics tab for saved history and the Library tab for search and learning status.
@@ -38,14 +38,14 @@ Frame mapping assumes the standard GAN face labels/color scheme and a solved log
 
 Open **Solve Timer** to practice a full 3×3 solve, independent of algorithm cases.
 
-1. Choose your up/front grip, then paste a scramble or generate a 25-turn practice scramble.
+1. Choose your up/front grip, then paste a scramble or generate an official-program random-state scramble.
 2. Select **Use scramble**. In simulator or GAN mode, follow the guided setup; simulator users can also apply it instantly.
 3. The first solving turn starts the clock. Solved-state detection stops it and saves the reconstruction.
 4. Select a history entry to replay its scramble and step through the solution. **Export JSON** saves the complete records for backup or future analysis.
 
 Manual mode confirms a physical scramble and uses Space or the Start/Stop buttons. It saves time and scramble, explicitly records that completion was unverified, and does not fabricate a solution. Move reconstruction requires simulator or GAN input.
 
-History retains the latest 1,000 solves in this browser. Best, mean, ao5, and ao12 are shown; mean excludes DNF, and rolling averages trim extremes. There are no +2 penalties or enforced inspection limits yet. Changing tabs, input mode, disconnecting, or syncing during a running solve saves it as DNF. Generated scrambles are random-move practice sequences, not official random-state competition scrambles.
+History retains the latest 1,000 solves in this browser. Best, mean, ao5, and ao12 are shown; mean excludes DNF, and rolling averages trim extremes. There are no +2 penalties or enforced inspection limits yet. Changing tabs, input mode, disconnecting, or syncing during a running solve saves it as DNF. Generated scrambles come from the signed TNoodle-WCA 1.2.3 official program. Pasted or edited scrambles are marked custom. Generation failures offer retry and never silently substitute a random-move sequence. For WCA-standard application choose white up / green front; other selected grips apply the sequence relative to that grip for practice. These are local practice scrambles, not delegated competition scramble sets.
 
 See [solve record format and analysis plans](./docs/SOLVE_RECORDS.md). No AI service receives your data automatically.
 
@@ -53,7 +53,7 @@ See the [viewer previews](./docs/README.md) and [development roadmap](./ROADMAP.
 
 ## Current limitations
 
-The catalog includes 21 PLL entries and an OLL starter set; full OLL/F2L and a standard-case audit remain pending. Hardware slice/wide/rotation decoding and initial facelet synchronization remain pending. Use outer-face-only algorithms with the calibrated grip for hardware trials; frame mapping for physical regrips during a solve is not automatic. Bluetooth integration requires physical-device verification. Stored data stays in the current browser and is not synced between devices.
+The catalog covers 41 basic F2L, 57 OLL, and 21 PLL cases with 272 reference variants. Preferred and personal alternates, session selections, and per-variant statistics persist locally. See [catalog sources and validation](./docs/ALGORITHM_CATALOG.md) and [official scramble setup](./docs/OFFICIAL_SCRAMBLES.md). An independent standard-case classification audit remains pending. Hardware slice/wide/rotation decoding and initial facelet synchronization remain pending. Use outer-face-only algorithms with the calibrated grip for hardware trials; frame mapping for physical regrips during a solve is not automatic. Bluetooth integration requires physical-device verification. Stored data stays in the current browser and is not synced between devices.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for milestone status and the next engineering tasks.
 

@@ -12,7 +12,7 @@ React 18 + TypeScript + Vite + Tailwind. `useTrainerState` owns the practice loo
 
 `ganBluetooth` delegates protocol handling to the installed `gan-web-bluetooth` package. The App forwards events through a ref to current trainer actions, avoiding connection-time closures. MAC addresses are cached per device rather than reused across devices. Connecting disables keyboard simulation. The i Carry has no orientation sensor. `gripOrientation.ts` defines 24 up/front frames, derives a display rotation, and maps GAN outer-face events into the selected solving frame before the trainer or timer consumes them. The saved frame locks during attempts. Changing physical grip during a solve is not automatically detected.
 
-Cases, attempt history (up to 2,000 entries), and XP persist in localStorage. Reward calculation is pure and returns an immediate event; it does not mutate values inside React state updaters. The library supports search, learning status changes, and launching practice. Analytics supports per-case and last-seven-days filters, recognition/execution charts, move pause breakdowns, and recent attempts. Practice filters define the weighted queue when Random Next is used and remain in effect for subsequent Next Case actions.
+Cases, attempt history (up to 2,000 entries), and XP persist in localStorage. Reward calculation is pure and returns an immediate event; it does not mutate values inside React state updaters. The library supports search, learning status changes, and launching practice. Analytics supports per-case and last-seven-days filters, recognition/execution charts, move pause breakdowns, and recent attempts. Training sessions store case/variant pairs. Balanced selection draws each pair once per shuffled cycle; adaptive selection weights variant-specific recognition, execution, and mistake statistics. Preferred and custom variants persist with case statistics.
 
 ## Milestones
 
@@ -21,15 +21,15 @@ Cases, attempt history (up to 2,000 entries), and XP persist in localStorage. Re
 | 1: architecture and simulator | Implemented, simulator loop browser-tested | Audit case names/algorithms against standard case definitions; broaden accessibility |
 | 2: scramble assistant and move parser | Partial | Hardware slice/wide composite move decoding, automatic regrip frame tracking, arbitrary-front detection, correction arrows |
 | 3: GAN Bluetooth | Adapter integrated; physical device unverified | Initial FACELETS hydration, reconnect/lost-packet behavior, physical calibration verification, real i Carry 4 acceptance test |
-| 4: telemetry and learning buckets | Core splits, storage, weighted queues, library, analytics implemented | Full 57 OLL and 41 F2L catalog, multi-status/manual queue selection, random AUF, custom algorithms, backup/export |
+| 4: telemetry and learning buckets | Core splits, storage, weighted queues, library, analytics implemented | Independent case classification audit, multi-status filtering, random AUF, session backup/import |
 
 Simulator slice/wide/rotation notation works through cubing.js. Hardware sensors only send outer face turns: the composite parser is not implemented, so hardware practice of cases using slices, wide moves, or rotations is not yet supported. FACELETS is exposed by the Bluetooth adapter but not hydrated into the trainer. Start with a physically solved cube and select the matching up/front grip before selecting a case. Sync Solved resets the logical origin; it cannot solve the physical cube.
 
-The current OLL starter catalog contains duplicate/mislabeled candidates inherited from the initial implementation. Inverse/algorithm identity tests prove round-trip correctness, not standard case classification. Do not claim the full catalog is complete or audited.
+The sourced catalog replaces the starter entries with 41 basic F2L, 57 OLL, and 21 PLL cases and 272 reference variants. Inverse/algorithm identity tests prove notation and setup round-trip correctness, not an independent standard-case classification audit. See docs/ALGORITHM_CATALOG.md for sources and numbering conventions.
 
 ## Verification
 
-- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (25 tests).
+- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (29 tests).
 - `npm run build`: TypeScript and production Vite bundle.
 - `npm run lint`: ESLint, including the active Voxygen component.
 - Browser acceptance: Sune setup, repeated wrong execution turns staying in EXECUTING, recovery followed by solved completion, library search, populated analytics, repeated rail turns, single-event rail controls, mouse dragging, roll adjustment, keyboard view alignment without new puzzle moves, and alignment persistence across view changes.
@@ -60,6 +60,10 @@ See [ROADMAP.md](./ROADMAP.md) for ordered follow-up work and camera acceptance 
 
 `useSolveTimer` owns live updates and local history in the App, so persistence survives view changes. UI navigation, input-mode changes, disconnects, and sync interrupt active solves. A record snapshots the starting grip, target scramble, setup method, actual setup events, solution events, input source, timestamps, duration, inspection interval, and completion status. GAN events retain both raw sensor notation and remapped logical notation. Last 1,000 records persist under `ganicv4_solves_v1`. Replay applies the saved grip rotation and scramble, then a prefix of the solution. JSON export remains local until the user chooses to share it.
 
-See [SOLVE_RECORDS.md](./docs/SOLVE_RECORDS.md) for the schema and future analysis boundaries. This does not yet implement CFOP phase detection, AI recommendations, camera tracking, or automatic regrip handling. Generated scrambles are clearly labeled random-turn practice scrambles; competition random-state generation remains future work.
+See [SOLVE_RECORDS.md](./docs/SOLVE_RECORDS.md) for the schema and future analysis boundaries. This does not yet implement CFOP phase detection, AI recommendations, camera tracking, or automatic regrip handling. General scrambles use signed TNoodle-WCA 1.2.3 through a loopback service and Vite dev/preview proxy. Provenance is saved in solve records. Pasted/edited sequences are custom; no unofficial generation fallback exists. See docs/OFFICIAL_SCRAMBLES.md.
 
 Browser acceptance also verified snap-on-release to white-up/red-front, frame locking, a tracked R U / U' R' solve, manual timing, replay, downloaded JSON content, and history reload. Regression tests cover every frame mapping, timer reconstruction and timing, DNF/manual behavior, scramble validation, and rolling averages.
+
+## Catalog and session acceptance
+
+Browser checks verified alternate preference and session persistence after reload, selecting a specific variant, guided inverse setup, solved execution, and variant-specific review statistics. The live timer successfully obtained a random-state scramble from the signed local official program. Original SVG previews derive from local cube geometry; no reference site artwork or implementation code is shipped.

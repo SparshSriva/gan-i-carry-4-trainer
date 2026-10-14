@@ -10,6 +10,7 @@ General solves are separate from algorithm attempt statistics. Records live in l
 | `createdAt` | Epoch milliseconds when the scramble session was created |
 | `source` | `gan`, `simulator`, or `manual` |
 | `scramble` | Validated outer-face target scramble in the selected solving frame |
+| `scrambleProvenance` | Optional source metadata: custom or signed TNoodle-WCA, version, event, generation timestamp; absent on older records |
 | `startingGrip` | Physical GAN/color faces chosen as `up` and `front` |
 | `setupMethod` | `guided`, `virtual-applied`, or `manual-confirmed` |
 | `setupMoves` | Actual guided setup events, including correction moves |

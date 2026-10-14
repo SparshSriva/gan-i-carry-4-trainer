@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/core.test.mjs",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "node scripts/dev.mjs --preview",
+    "setup:scrambles": "node scripts/tnoodle-runtime.mjs --setup"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

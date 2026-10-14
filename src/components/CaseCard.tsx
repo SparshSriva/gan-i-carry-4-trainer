@@ -44,6 +44,7 @@ export default function CaseCard({
     );
   }
 
+  const stats=activeCase.variantStats?.[activeCase.preferredVariantId] ?? activeCase;
   return (
     <div className="rounded-xl border border-zinc-700 bg-zinc-800/60 p-4 space-y-3">
       {/* Header */}
@@ -101,11 +102,11 @@ export default function CaseCard({
       </label>
 
       {/* Quick stats */}
-      {activeCase.attempts > 0 && (
+      {stats.attempts > 0 && (
         <div className="grid grid-cols-3 gap-2 pt-1">
-          <Stat label="Attempts" value={String(activeCase.attempts)} />
-          <Stat label="Avg Rec" value={`${(activeCase.avgRecognitionMs / 1000).toFixed(2)}s`} />
-          <Stat label="Avg Exec" value={`${(activeCase.avgExecutionMs / 1000).toFixed(2)}s`} />
+          <Stat label="Variant attempts" value={String(stats.attempts)} />
+          <Stat label="Avg Rec" value={`${(stats.avgRecognitionMs / 1000).toFixed(2)}s`} />
+          <Stat label="Avg Exec" value={`${(stats.avgExecutionMs / 1000).toFixed(2)}s`} />
         </div>
       )}
     </div>

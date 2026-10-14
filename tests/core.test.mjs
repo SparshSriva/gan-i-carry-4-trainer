@@ -14,7 +14,10 @@ async function sourceModule(path, imports = {}) {
 }
 const moves = await sourceModule('utils/moveUtils.ts');
 const { ScrambleAssistant } = (await sourceModule('utils/ScrambleAssistant.ts', { './moveUtils': moves.url })).exports;
-const { ALL_CASES } = (await sourceModule('data/algDatabase.ts')).exports;
+const catalog=JSON.parse(await readFile(new URL('../src/data/algorithmCatalog.json',import.meta.url),'utf8'));
+const catalogUrl=`data:text/javascript;base64,${Buffer.from('export default '+JSON.stringify(catalog)).toString('base64')}`;
+const databaseModule=await sourceModule('data/algDatabase.ts',{'./algorithmCatalog.json':catalogUrl});
+const { ALL_CASES }=databaseModule.exports;
 const puzzle = await puzzles['3x3x3'].kpuzzle();
 const solved = p => p.experimentalIsSolved({ ignorePuzzleOrientation: true, ignoreCenterOrientation: true });
 const assistant = alg => new ScrambleAssistant(alg, () => {});
@@ -153,7 +156,8 @@ test('drag snapping picks a valid up/front frame',()=>{
   assert.deepEqual(gripModel.snapGrip({yaw:120,pitch:0,roll:0},gripModel.DEFAULT_GRIP),{up:'U',front:'R'});
   for(let yaw=-180;yaw<180;yaw+=30)for(let pitch=-80;pitch<90;pitch+=20)assert.equal(gripModel.validGrip(gripModel.snapGrip({yaw,pitch,roll:45},gripModel.DEFAULT_GRIP)),true);
 });
-const sessionModel=(await sourceModule('utils/solveSession.ts',{'./ScrambleAssistant':(await sourceModule('utils/ScrambleAssistant.ts',{'./moveUtils':moves.url})).url})).exports;
+const sessionModule=await sourceModule('utils/solveSession.ts',{'./ScrambleAssistant':(await sourceModule('utils/ScrambleAssistant.ts',{'./moveUtils':moves.url})).url});
+const sessionModel=sessionModule.exports;
 test('general timer preserves scramble, frame, raw and logical solution events and timing',()=>{
   const s=new sessionModel.SolveSession(puzzle,"R U",{up:'U',front:'R'},'gan');
   s.feed('R',1000,'B');s.feed('U',1100,'U');assert.equal(s.phase,'ready');
@@ -171,10 +175,9 @@ test('manual timer saves an explicitly unverified time with no fabricated moves'
   const s=new sessionModel.SolveSession(puzzle,'R U',gripModel.DEFAULT_GRIP,'manual');s.useManualSetup(1000);s.start(2000);const r=s.finish(5000);
   assert.equal(r.durationMs,3000);assert.equal(r.solved,false);assert.equal(r.source,'manual');assert.deepEqual(r.solution,[]);
 });
-test('scramble validation rejects unsupported notation and practice scrambles have 25 turns',()=>{
+test('scramble validation rejects unsupported notation',()=>{
   assert.throws(()=>sessionModel.validateScramble('R potato U'));assert.throws(()=>sessionModel.validateScramble(''));assert.throws(()=>sessionModel.validateScramble('x R'));
   assert.equal(sessionModel.validateScramble(" R   U2 F' "),"R U2 F'");
-  const tokens=sessionModel.practiceScramble().split(' ');assert.equal(tokens.length,25);for(let i=1;i<tokens.length;i++)assert.notEqual(tokens[i][0],tokens[i-1][0]);
 });
 
 test('rolling solve averages trim extremes and handle DNF',()=>{
@@ -183,4 +186,47 @@ test('rolling solve averages trim extremes and handle DNF',()=>{
   assert.equal(sessionModel.rollingAverage(records.slice(0,4),5),null);
   assert.equal(sessionModel.rollingAverage([...records.slice(0,4),{durationMs:0,termination:'dnf'}],5),3000);
   assert.equal(sessionModel.rollingAverage([...records.slice(0,3),{durationMs:0,termination:'dnf'},{durationMs:0,termination:'dnf'}],5),'DNF');
+});
+
+test('catalog has complete CFOP sections and preserves every sourced alternate',()=>{
+  assert.equal(ALL_CASES.filter(c=>c.subset==='OLL').length,57);
+  assert.equal(ALL_CASES.filter(c=>c.subset==='PLL').length,21);
+  assert.equal(ALL_CASES.filter(c=>c.subset==='F2L').length,41);
+  assert.equal(ALL_CASES.reduce((n,c)=>n+c.variants.length,0),272);
+  assert.equal(new Set(ALL_CASES.map(c=>c.id)).size,119);
+  for(const c of ALL_CASES)for(const v of c.variants){
+    assert.ok(c.group && v.sourceUrl);
+    const tokens=moves.exports.parseAlg(v.alg);assert.equal(tokens.join(' '),v.alg,v.id);
+    assert.equal(solved(puzzle.defaultPattern().applyAlg(moves.exports.invertAlg(v.alg)).applyAlg(v.alg)),true,v.id);
+  }
+});
+test('training sessions can hold multiple alternates and resolve their own setups',async()=>{
+  const {toggleTrainingEntry,resolveEntry}= (await sourceModule('utils/trainingSession.ts')).exports;
+  const c=ALL_CASES.find(c=>c.id==='oll-sune');
+  let s={id:'session',name:'Practice',selection:'balanced',entries:[]};
+  for(const v of c.variants)s=toggleTrainingEntry(s,{caseId:c.id,variantId:v.id});
+  assert.equal(s.entries.length,c.variants.length);
+  for(const e of s.entries){const selected=resolveEntry(ALL_CASES,e);assert.equal(selected.alg,c.variants.find(v=>v.id===e.variantId).alg);assert.equal(selected.preferredVariantId,e.variantId);}
+  s=toggleTrainingEntry(s,s.entries[0]);assert.equal(s.entries.length,c.variants.length-1);
+});
+test('case preferences and per-variant telemetry persist independently',async()=>{
+  const storage=(await sourceModule('utils/storage.ts',{'../data/algDatabase':databaseModule.url})).exports;
+  const original=globalThis.localStorage,values=new Map();globalThis.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)};
+  try{
+    const c=ALL_CASES.find(c=>c.id==='oll-sune'),v=c.variants[1];
+    const attempt={caseId:c.id,variantId:v.id,recognitionMs:500,executionMs:1000,tps:7,moveDeltas:[100],timestamp:2000};
+    const updated=storage.updateCaseStats(ALL_CASES.map(item=>item.id===c.id?{...item,alg:v.alg,preferredVariantId:v.id}:item),attempt,false);
+    storage.saveCases(updated);const loaded=storage.loadCases().find(item=>item.id===c.id);
+    assert.equal(loaded.alg,v.alg);assert.equal(loaded.preferredVariantId,v.id);assert.equal(loaded.variantStats[v.id].attempts,1);
+    assert.equal(loaded.variants.length,c.variants.length);
+  }finally{if(original===undefined)delete globalThis.localStorage;else globalThis.localStorage=original;}
+});
+test('official generation verifies signed TNoodle before accepting a scramble',async()=>{
+  const {generateOfficialScramble}= (await sourceModule('utils/officialScramble.ts',{'./solveSession':sessionModule.url})).exports;
+  const original=globalThis.fetch,calls=[];
+  globalThis.fetch=async(url,options)=>{calls.push([url,options?.method]);return {ok:true,json:async()=>url.endsWith('/version')?{projectName:'TNoodle-WCA',projectVersion:'1.2.3',signedBuild:true}:{scramble:"R U2 F'"}};};
+  try{const result=await generateOfficialScramble();assert.equal(result.provenance.kind,'tnoodle-wca');assert.equal(result.provenance.version,'1.2.3');assert.equal(calls[1][1],'POST');
+    globalThis.fetch=async()=>({ok:true,json:async()=>({projectName:'TNoodle-WCA',projectVersion:'1.2.3',signedBuild:false})});
+    await assert.rejects(generateOfficialScramble(),/signed TNoodle/);
+  }finally{globalThis.fetch=original;}
 });

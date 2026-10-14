@@ -9,3 +9,11 @@ Captured from the local app during development on October 14, 2026. Attempts and
 - [Analytics](./analytics-preview.png): saved attempt statistics, time chart, and pause breakdown.
 
 The previews document visible UI verification. Physical GAN acceptance tests and camera orientation tracking remain pending; see [the roadmap](../ROADMAP.md).
+
+## Algorithm training sessions
+
+Grouped catalog, alternate selection, and saved session builder:
+
+![Trainer session builder](./trainer-session-preview.png)
+
+See [catalog provenance](./ALGORITHM_CATALOG.md) and [official scramble setup](./OFFICIAL_SCRAMBLES.md).

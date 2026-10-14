@@ -1,3 +1,4 @@
+import type { ScrambleProvenance } from '../utils/officialScramble';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { puzzles } from 'cubing/puzzles';
 import type { KPuzzle } from 'cubing/kpuzzle';
@@ -20,10 +21,10 @@ export function useSolveTimer(enabled: boolean, simulator: boolean, preset: Keyb
     setHistory(previous=>{const next=[...previous,result].slice(-1000);return next;});
   },[]);
   useEffect(()=>{try{saveSolves(history);}catch{setError('History could not be saved to this browser. Export JSON to keep your solves.');}},[history]);
-  const begin=useCallback((scramble:string, manual=false)=>{
+  const begin=useCallback((scramble:string, manual=false,provenance:ScrambleProvenance={kind:'custom'})=>{
     if(!puzzle.current)return;
     try{
-      const next=new SolveSession(puzzle.current,scramble,{...gripRef.current},manual?'manual':simulator?'simulator':'gan');
+      const next=new SolveSession(puzzle.current,scramble,{...gripRef.current},manual?'manual':simulator?'simulator':'gan',provenance);
       ref.current=next;setSession(next);setMoves([]);setError('');setNow(Date.now());setRevision(n=>n+1);
     }catch(e){setError(e instanceof Error?e.message:'Invalid scramble');}
   },[simulator]);

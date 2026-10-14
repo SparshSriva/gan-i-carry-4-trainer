@@ -15,9 +15,11 @@ import StateBanner from './StateBanner';
 import ScrambleStrip from './ScrambleStrip';
 import CaseCard from './CaseCard';
 import CaseSelector from './CaseSelector';
+import type { CaseSelectorProps } from './CaseSelector';
 import { Box, Columns, Sparkles, Award, GitGraph } from 'lucide-react';
 
 interface TrainerViewProps {
+  catalogProps: CaseSelectorProps;
   phase: TrainerPhase;
   grip:GripOrientation;
   onGripChange:(g:GripOrientation)=>void;
@@ -30,28 +32,29 @@ interface TrainerViewProps {
   simulatorMode: boolean;
   moveHistory: string[];
   onSelectCase: (c: AlgCase) => void;
-  onNextCase: (pool?: AlgCase[]) => void;
+  onNextCase: () => void;
   onNextFromReview: () => void;
+  onBackToSession:()=>void;
   onStatusChange: (id: string, status: AlgCase['status']) => void;
   onDismissXp: () => void;
   onFeedMove: (move: string) => void;
 }
 
 export default function TrainerView({
+  catalogProps,
   phase,
   grip,
   onGripChange,
   activeCase,
   scrambleSnap,
   lastAttempt,
-  cases,
   lastXpEvent,
   streak,
   simulatorMode,
   moveHistory,
   onSelectCase,
-  onNextCase,
   onNextFromReview,
+  onBackToSession,
   onStatusChange,
   onDismissXp,
   onFeedMove,
@@ -93,6 +96,8 @@ export default function TrainerView({
     { id: 'net', label: 'Facelet Net', icon: Box },
     { id: 'll', label: 'Last Layer', icon: Box },
   ];
+
+  if(phase==='CASE_SELECTION')return <section className="h-full overflow-y-auto p-4 sm:p-6 max-w-[1500px] mx-auto space-y-5"><header className="space-y-2"><p className="text-xs uppercase tracking-widest text-indigo-400">Recognition · execution · fluency</p><h1 className="text-2xl font-bold">Build your training session</h1><p className="text-sm text-zinc-400">Browse F2L, OLL, and PLL by section. Pick the algorithms you want to practice, compare alternates, and train from guided case setups.</p></header><CaseSelector {...catalogProps}/></section>;
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-4 p-4 overflow-y-auto bg-zinc-950">
@@ -150,6 +155,7 @@ export default function TrainerView({
 
       {/* ── Right Column: Scramble Assistant + Case Card + Gamification ──── */}
       <div className="flex flex-col gap-3 flex-1 min-w-0 lg:overflow-y-auto">
+        <div className="flex justify-between gap-2 text-xs text-zinc-400"><button onClick={onBackToSession} title="Exit this attempt; begin the next case from a solved cube" className="text-indigo-300">← Session builder</button><span>{catalogProps.session.name} · {catalogProps.session.entries.length} variants</span><span>{activeCase?.variants.find(v=>v.id===activeCase.preferredVariantId)?.label}</span></div>
         <StateBanner phase={phase} />
         {phase === 'SCRAMBLING' && <p className="text-xs text-zinc-400">Start with a solved cube held in your selected up/front orientation. Follow the setup below.</p>}
         {phase === 'EXECUTING' && <p role="status" className="text-xs text-indigo-300">Keep solving. The attempt ends when the cube reaches the solved state.</p>}
@@ -191,13 +197,7 @@ export default function TrainerView({
           </div>
         )}
 
-        {phase === 'CASE_SELECTION' ? (
-          <CaseSelector
-            cases={cases}
-            onSelect={onSelectCase}
-            onNext={onNextCase}
-          />
-        ) : (
+        { (
           <>
             <ScrambleStrip snap={scrambleSnap} />
 
@@ -216,9 +216,10 @@ export default function TrainerView({
               <div className="flex gap-2.5 pt-2">
                 <button
                   onClick={onNextFromReview}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/20"
+                  disabled={!catalogProps.session.entries.length}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 active:scale-[0.99] text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/20"
                 >
-                  Next Case (Enter ↵)
+                  Next session algorithm (Enter ↵)
                 </button>
                 <button
                   onClick={() => activeCase && onSelectCase(activeCase)}

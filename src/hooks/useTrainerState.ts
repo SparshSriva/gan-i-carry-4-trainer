@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { AlgCase, TrainerPhase, AttemptResult } from '../types';
+import { AlgCase, TrainerPhase, AttemptResult, TrainingEntry, TrainingSession } from '../types';
 import { ScrambleAssistant, ScrambleAssistantSnapshot } from '../utils/ScrambleAssistant';
 import { invertAlg } from '../utils/moveUtils';
 import { loadCases, saveCases, appendAttempt, updateCaseStats } from '../utils/storage';
@@ -19,9 +19,14 @@ import { KeybindPresetId, KEYBIND_PRESETS } from '../utils/keybinds';
 import { playTurnClick, playErrorBuzz, playSuccessChime, isSoundEnabled, setSoundEnabled } from '../utils/soundEffects';
 import { puzzles } from 'cubing/puzzles';
 import type { KPattern, KPuzzle } from 'cubing/kpuzzle';
+import { Alg } from 'cubing/alg';
+import { DEFAULT_GRIP } from '../utils/gripOrientation';
+import type { GripOrientation } from '../utils/gripOrientation';
+import { loadTrainingSession, saveTrainingSession, toggleTrainingEntry, resolveEntry, entryKey } from '../utils/trainingSession';
 import { useXpSystem, XpState, XpEvent } from './useXpSystem';
 
 export interface TrainerState {
+  trainingSession: TrainingSession;
   phase: TrainerPhase;
   activeCase: AlgCase | null;
   scrambleSnap: ScrambleAssistantSnapshot | null;
@@ -40,7 +45,13 @@ export interface TrainerState {
 
 export interface TrainerActions {
   selectCase: (c: AlgCase) => void;
-  nextCase: (pool?: AlgCase[]) => void;
+  nextCase: () => void;
+  toggleSessionEntry: (entry:TrainingEntry)=>void;
+  addSessionEntries: (entries:TrainingEntry[])=>void;
+  setSessionSelection: (mode:TrainingSession['selection'])=>void;
+  setSessionName: (name:string)=>void;
+  preferVariant: (caseId:string,variantId:string)=>void;
+  addCustomVariant: (caseId:string,label:string,alg:string)=>string|null;
   feedMove: (move: string, timestamp?: number) => void;
   setSimulatorMode: (enabled: boolean) => void;
   syncSolvedState: () => void;
@@ -51,8 +62,14 @@ export interface TrainerActions {
   dismissXpBanner: () => void;
 }
 
-export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerActions] {
+export function useTrainerState(keyboardEnabled = true, grip:GripOrientation = DEFAULT_GRIP): [TrainerState, TrainerActions] {
   const [cases, setCases] = useState<AlgCase[]>(() => loadCases());
+  const [trainingSession,setTrainingSession]=useState(()=>loadTrainingSession(cases));
+  useEffect(()=>saveTrainingSession(trainingSession),[trainingSession]);
+  const gripRef=useRef(grip);gripRef.current=grip;
+  const attemptGripRef=useRef(grip);
+  const setupAlgRef=useRef('');
+  const executionEvents=useRef<{move:string;timestamp:number}[]>([]);
   const [phase, setPhaseState] = useState<TrainerPhase>('CASE_SELECTION');
   const phaseRef = useRef<TrainerPhase>('CASE_SELECTION');
   const setPhase = useCallback((next: TrainerPhase) => { phaseRef.current = next; setPhaseState(next); }, []);
@@ -123,6 +140,12 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
 
     const result: AttemptResult = {
       caseId: activeCase.id,
+      variantId: activeCase.preferredVariantId,
+      algorithm: activeCase.alg,
+      setupAlg: setupAlgRef.current,
+      sessionId: trainingSession.entries.some(e=>e.caseId===activeCase.id && e.variantId===activeCase.preferredVariantId)?trainingSession.id:undefined,
+      startingGrip: {...attemptGripRef.current},
+      moveEvents: executionEvents.current.map(e=>({...e,elapsedMs:Math.max(0,e.timestamp-execStartRef.current!)})),
       recognitionMs: recMs,
       executionMs: execMs,
       tps,
@@ -142,7 +165,7 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
 
     playSuccessChime();
     setPhase('REVIEW');
-  }, [recordAttempt, setPhase]);
+  }, [recordAttempt, setPhase, trainingSession]);
 
   const feedMove = useCallback((move: string, timestamp = Date.now()) => {
     const currentPhase = phaseRef.current;
@@ -170,14 +193,14 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
     }
 
     // Rotations change the frame, but do not start the physical execution timer.
-    if (currentPhase === 'RECOGNIZING' && /^[xyz]/.test(move)) return;
+    if (currentPhase === 'RECOGNIZING' && /^[xyz]/.test(move)) { executionMoves.current.push(move);executionEvents.current.push({move,timestamp});return; }
     if (currentPhase === 'RECOGNIZING') {
       execStartRef.current = timestamp;
       moveTimestamps.current = [];
-      executionMoves.current = [];
       setPhase('EXECUTING');
     }
     executionMoves.current.push(move);
+    executionEvents.current.push({move,timestamp});
     if (!/^[xyz]/.test(move)) moveTimestamps.current.push(timestamp);
     if (patternRef.current.experimentalIsSolved({
       ignorePuzzleOrientation: true, ignoreCenterOrientation: true,
@@ -217,6 +240,8 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
   const selectCase = useCallback((c: AlgCase) => {
     if (!puzzleRef.current) return;
     activeRef.current = c;
+    attemptGripRef.current={...gripRef.current};
+    executionEvents.current=[];
     patternRef.current = puzzleRef.current.defaultPattern();
     setMoveHistory([]);
     recStartRef.current = null;
@@ -229,21 +254,48 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
     setLastMove(null);
 
     const scramble = c.setup || invertAlg(c.alg);
+    setupAlgRef.current=scramble;
     const assistant = new ScrambleAssistant(scramble, setScrambleSnap);
     assistantRef.current = assistant;
     setScrambleSnap(assistant.snapshot());
     setPhase('SCRAMBLING');
   }, [setPhase]);
 
-  const queueIds = useRef<string[] | null>(null);
-  const nextCase = useCallback((pool?: AlgCase[]) => {
-    if (pool) queueIds.current = pool.map(c => c.id);
-    setLastXpEvent(null);
-    const next = selectNextCase(cases.filter(c => !queueIds.current || queueIds.current.includes(c.id)), {
-      statusFilter: ['unlearned', 'learning', 'learned'],
-    });
-    if (next) selectCase(next);
-  }, [cases, selectCase]);
+  const balancedBag=useRef<string[]>([]);
+  useEffect(()=>{balancedBag.current=[];},[trainingSession.entries,trainingSession.selection]);
+  const nextCase = useCallback(() => {
+    const pool=trainingSession.entries.map(e=>resolveEntry(cases,e)).filter((c):c is AlgCase=>Boolean(c));
+    if(!pool.length)return;
+    let next:AlgCase|null=null;
+    if(trainingSession.selection==='weighted') {
+      const weighted=pool.map(c=>({...c,...c.variantStats?.[c.preferredVariantId]}));
+      next=selectNextCase(weighted,{statusFilter:['unlearned','learning','learned']});
+    } else {
+      if(!balancedBag.current.length){
+        balancedBag.current=trainingSession.entries.map(entryKey);
+        for(let i=balancedBag.current.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[balancedBag.current[i],balancedBag.current[j]]=[balancedBag.current[j],balancedBag.current[i]];}
+      }
+      const key=balancedBag.current.pop();
+      next=pool.find(c=>`${c.id}:${c.preferredVariantId}`===key)??pool[0];
+    }
+    if(next)selectCase(next);
+  },[cases,trainingSession,selectCase]);
+  const toggleSessionEntry=useCallback((entry:TrainingEntry)=>setTrainingSession(s=>toggleTrainingEntry(s,entry)),[]);
+  const addSessionEntries=useCallback((entries:TrainingEntry[])=>setTrainingSession(s=>({...s,entries:[...s.entries,...entries.filter(e=>!s.entries.some(prior=>entryKey(prior)===entryKey(e)))]})),[]);
+  const setSessionSelection=useCallback((selection:TrainingSession['selection'])=>setTrainingSession(s=>({...s,selection})),[]);
+  const setSessionName=useCallback((name:string)=>setTrainingSession(s=>({...s,name:name.slice(0,80)})),[]);
+  const preferVariant=useCallback((id:string,variantId:string)=>{
+    setCases(prev=>prev.map(c=>{const v=c.variants.find(v=>v.id===variantId);return c.id===id && v?{...c,alg:v.alg,preferredVariantId:variantId,setup:undefined}:c;}));
+  },[]);
+  const addCustomVariant=useCallback((id:string,label:string,input:string):string|null=>{
+    try{
+      const expanded=new Alg(input).expand().toString().replace(/([RLUDFB])w/g,(_,f:string)=>f.toLowerCase()).replace(/2'/g,'2');
+      if(!expanded.trim() || expanded.split(/\s+/).length>200 || expanded.split(/\s+/).some(m=>!/^[RLUDFBrludfbMESxyz][2']?$/.test(m)))throw new Error('Enter 1–200 moves.');
+      puzzleRef.current?.algToTransformation(expanded);
+      const variant={id:`custom-${crypto.randomUUID()}`,label:label.trim().slice(0,80)||'My alternate',alg:expanded,tags:['Personal alternate']};
+      setCases(prev=>prev.map(c=>c.id===id?{...c,variants:[...c.variants,variant]}:c));return null;
+    }catch(e){return e instanceof Error?e.message:'Invalid algorithm';}
+  },[]);
 
   const syncSolvedState = useCallback(() => {
     setPhase('CASE_SELECTION');
@@ -266,9 +318,13 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
     setActiveCase(prev => prev?.id === id ? { ...prev, status } : prev);
   }, []);
 
+  const latestCase=cases.find(c=>c.id===activeCase?.id);
+  const activeVariant=latestCase?.variants.find(v=>v.id===activeCase?.preferredVariantId);
+  const displayedCase=latestCase && activeVariant?{...latestCase,alg:activeVariant.alg,preferredVariantId:activeVariant.id}:activeCase;
   const state: TrainerState = {
+    trainingSession,
     phase,
-    activeCase: cases.find(c => c.id === activeCase?.id) ?? activeCase,
+    activeCase: displayedCase,
     scrambleSnap,
     lastAttempt,
     cases,
@@ -286,6 +342,12 @@ export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerA
   const actions: TrainerActions = {
     selectCase,
     nextCase,
+    toggleSessionEntry,
+    addSessionEntries,
+    setSessionSelection,
+    setSessionName,
+    preferVariant,
+    addCustomVariant,
     feedMove,
     setSimulatorMode,
     syncSolvedState,
