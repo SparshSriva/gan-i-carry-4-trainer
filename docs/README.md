@@ -17,3 +17,8 @@ Grouped catalog, alternate selection, and saved session builder:
 ![Trainer session builder](./trainer-session-preview.png)
 
 See [catalog provenance](./ALGORITHM_CATALOG.md) and [official scramble setup](./OFFICIAL_SCRAMBLES.md).
+
+## F2L recognition cards
+
+![Simplified F2L reference diagrams](./f2l-cards-preview.png)
+
