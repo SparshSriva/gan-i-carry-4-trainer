@@ -1,6 +1,8 @@
 /**
- * App.tsx — root component. Wires views, BLE stub, trainer state,
- * HyperSpeedCube keybinding modal, and gamification layers.
+ * App.tsx — root application component.
+ * Links views, Web Bluetooth hardware layer for GAN i Carry 4,
+ * ScrambleAssistant trainer state, HyperSpeedCube keyboard simulator,
+ * and Voxygen 2D stereographic permutation engine.
  */
 
 import { useState } from 'react';
@@ -9,19 +11,104 @@ import { useTrainerState } from './hooks/useTrainerState';
 import NavBar from './components/NavBar';
 import TrainerView from './components/TrainerView';
 import { KeybindReferenceModal } from './components/KeybindReferenceModal';
+import { MacAddressModal } from './components/MacAddressModal';
+import { ganBluetooth } from './utils/ganBluetooth';
 
 export default function App() {
   const [view, setView] = useState<AppView>('trainer');
-  const [connectionStatus] = useState<ConnectionStatus>('disconnected');
-  const [batteryLevel] = useState<number | null>(null);
-  const [cubeName] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
+  const [cubeName, setCubeName] = useState<string | null>(null);
   const [keybindsOpen, setKeybindsOpen] = useState(false);
+
+  // MAC Address Modal state for browser BLE sandboxing fallback
+  const [macModal, setMacModal] = useState<{
+    isOpen: boolean;
+    deviceName: string;
+    resolve?: (mac: string | null) => void;
+  }>({
+    isOpen: false,
+    deviceName: 'GAN Smart Cube',
+  });
 
   const [state, actions] = useTrainerState();
 
-  const handleConnect = () => {
-    // Milestone 3: BLE connection
-    alert('BLE integration connects in Milestone 3. Currently utilizing high-performance HyperSpeedCube keyboard simulator.');
+  const handleConnect = async () => {
+    // If already connected, toggle disconnect
+    if (connectionStatus === 'connected') {
+      await ganBluetooth.disconnect();
+      setConnectionStatus('disconnected');
+      setBatteryLevel(null);
+      setCubeName(null);
+      return;
+    }
+
+    if (!ganBluetooth.isSupported()) {
+      alert(
+        'Web Bluetooth is not supported in this browser.\nPlease use Google Chrome, Microsoft Edge, or Brave on desktop or laptop.'
+      );
+      return;
+    }
+
+    setConnectionStatus('connecting');
+
+    try {
+      const conn = await ganBluetooth.connect({
+        onMove: (move) => actions.feedMove(move),
+        onBattery: (level) => setBatteryLevel(level),
+        onHardware: (info) => {
+          if (info.hardwareName) {
+            setCubeName(info.hardwareName);
+          }
+        },
+        onDisconnect: () => {
+          setConnectionStatus('disconnected');
+          setBatteryLevel(null);
+          setCubeName(null);
+        },
+        onMacPrompt: (device) => {
+          return new Promise<string | null>((resolve) => {
+            setMacModal({
+              isOpen: true,
+              deviceName: device.name || 'GAN Smart Cube',
+              resolve,
+            });
+          });
+        },
+      });
+
+      setConnectionStatus('connected');
+      setCubeName(conn.deviceName || 'GAN i Carry 4');
+    } catch (err: unknown) {
+      console.error('Bluetooth connection error:', err);
+      setConnectionStatus('disconnected');
+      const error = err as { name?: string; message?: string };
+      // Ignore user cancellation errors from browser device picker
+      if (error.name !== 'NotFoundError' && !error.message?.includes('User cancelled')) {
+        alert(error.message || 'Failed to connect to GAN cube.');
+      }
+    }
+  };
+
+  const handleSyncSolved = async () => {
+    if (ganBluetooth.isConnected()) {
+      await ganBluetooth.resetCube();
+    }
+    actions.syncSolvedState();
+  };
+
+  const handleMacSubmit = (mac: string) => {
+    if (macModal.resolve) {
+      macModal.resolve(mac);
+    }
+    setMacModal(prev => ({ ...prev, isOpen: false, resolve: undefined }));
+  };
+
+  const handleMacCancel = () => {
+    if (macModal.resolve) {
+      macModal.resolve(null);
+    }
+    setMacModal(prev => ({ ...prev, isOpen: false, resolve: undefined }));
   };
 
   const handleNextFromReview = () => {
@@ -40,7 +127,7 @@ export default function App() {
         soundEnabled={state.soundEnabled}
         xpState={state.xpState}
         onConnect={handleConnect}
-        onSyncSolved={actions.syncSolvedState}
+        onSyncSolved={handleSyncSolved}
         onToggleSimulator={actions.toggleSimulator}
         onToggleSound={actions.toggleSound}
         onOpenKeybinds={() => setKeybindsOpen(true)}
@@ -57,7 +144,6 @@ export default function App() {
             lastXpEvent={state.lastXpEvent}
             streak={state.streak}
             simulatorMode={state.simulatorMode}
-            facelets={state.facelets}
             lastMove={state.lastMove}
             onSelectCase={actions.selectCase}
             onNextCase={actions.nextCase}
@@ -95,6 +181,14 @@ export default function App() {
         onSelectPreset={actions.setKeybindPreset}
         soundEnabled={state.soundEnabled}
         onToggleSound={actions.toggleSound}
+      />
+
+      {/* GAN MAC Address Modal (Fallback for Chrome BLE MAC Sandboxing) */}
+      <MacAddressModal
+        isOpen={macModal.isOpen}
+        deviceName={macModal.deviceName}
+        onSubmit={handleMacSubmit}
+        onCancel={handleMacCancel}
       />
     </div>
   );

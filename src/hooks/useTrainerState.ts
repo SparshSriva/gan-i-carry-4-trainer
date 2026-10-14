@@ -18,8 +18,6 @@ import { selectNextCase } from '../utils/weightedSelection';
 import { KeybindPresetId, KEYBIND_PRESETS } from '../utils/keybinds';
 import { playTurnClick, playErrorBuzz, playSuccessChime, isSoundEnabled, setSoundEnabled } from '../utils/soundEffects';
 import { useXpSystem, XpState, XpEvent } from './useXpSystem';
-import { applyFaceletMove, applyFaceletAlg } from '../utils/faceletSimulator';
-import { SOLVED_FACELETS } from '../data/navaCakraGeometry';
 
 export interface TrainerState {
   phase: TrainerPhase;
@@ -33,7 +31,6 @@ export interface TrainerState {
   xpState: XpState;
   lastXpEvent: XpEvent | null;
   streak: number;
-  facelets: string;        // 54-char mathematical facelet string
   lastMove: string | null; // latest move executed
 }
 
@@ -59,7 +56,6 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   const [keybindPreset, setKeybindPresetState] = useState<KeybindPresetId>('hyperspeedcube');
   const [soundActive, setSoundActive] = useState<boolean>(() => isSoundEnabled());
   const [lastXpEvent, setLastXpEvent] = useState<XpEvent | null>(null);
-  const [facelets, setFacelets] = useState<string>(SOLVED_FACELETS);
   const [lastMove, setLastMove] = useState<string | null>(null);
 
   const { xpState, recordAttempt } = useXpSystem();
@@ -127,7 +123,6 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
 
     playTurnClick();
     setLastMove(move);
-    setFacelets(prev => applyFaceletMove(prev, move));
 
     if (phase === 'SCRAMBLING' || phase === 'ERROR_RECOVERY') {
       assistantRef.current?.feedMove(move);
@@ -201,11 +196,7 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     setActiveCase(c);
     setLastMove(null);
 
-    // Compute initial scrambled facelets for the 2D permutation graph
     const scramble = invertAlg(c.alg);
-    const initialScrambledFacelets = applyFaceletAlg(SOLVED_FACELETS, scramble);
-    setFacelets(initialScrambledFacelets);
-
     const assistant = new ScrambleAssistant(scramble, setScrambleSnap);
     assistantRef.current = assistant;
     setScrambleSnap(assistant.snapshot());
@@ -225,7 +216,6 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     setActiveCase(null);
     setScrambleSnap(null);
     setLastXpEvent(null);
-    setFacelets(SOLVED_FACELETS);
     setLastMove(null);
   }, []);
 
@@ -249,7 +239,6 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     xpState,
     lastXpEvent,
     streak: xpState.streak,
-    facelets,
     lastMove,
   };
 

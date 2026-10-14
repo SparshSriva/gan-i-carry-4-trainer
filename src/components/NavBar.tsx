@@ -143,10 +143,14 @@ export const NavBar: React.FC<NavBarProps> = ({
         {/* Hardware status */}
         {connectionStatus === 'connected' ? (
           <>
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium px-2 py-1 bg-emerald-950/50 rounded-lg border border-emerald-800">
+            <button
+              onClick={onConnect}
+              title="Connected. Click to disconnect cube"
+              className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-rose-300 font-medium px-2 py-1 bg-emerald-950/50 hover:bg-rose-950/40 rounded-lg border border-emerald-800 hover:border-rose-700/60 transition-colors"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               {cubeName ?? 'GAN i4'}
-            </span>
+            </button>
             {batteryLevel !== null && (
               <span className="flex items-center gap-1 text-xs text-zinc-400">
                 <Battery className="w-3.5 h-3.5" />

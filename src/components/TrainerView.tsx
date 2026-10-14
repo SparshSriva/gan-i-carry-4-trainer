@@ -15,7 +15,7 @@ import StateBanner from './StateBanner';
 import ScrambleStrip from './ScrambleStrip';
 import CaseCard from './CaseCard';
 import CaseSelector from './CaseSelector';
-import { Box, CircleDot, Columns, Sparkles, Award, GitGraph } from 'lucide-react';
+import { Box, Columns, Sparkles, Award, GitGraph } from 'lucide-react';
 
 interface TrainerViewProps {
   phase: TrainerPhase;
@@ -26,7 +26,6 @@ interface TrainerViewProps {
   lastXpEvent: XpEvent | null;
   streak: number;
   simulatorMode: boolean;
-  facelets: string;
   lastMove: string | null;
   onSelectCase: (c: AlgCase) => void;
   onNextCase: () => void;
@@ -45,7 +44,6 @@ export default function TrainerView({
   lastXpEvent,
   streak,
   simulatorMode,
-  facelets,
   lastMove,
   onSelectCase,
   onNextCase,
@@ -85,10 +83,8 @@ export default function TrainerView({
 
   const viewModes: { id: ViewMode; label: string; icon: typeof Box }[] = [
     { id: 'split', label: 'Dual View (3D + 2D)', icon: Columns },
-    { id: 'voxygen', label: '2D Rails (Voxygen)', icon: GitGraph },
-    { id: 'circles', label: '9-Circles Graph', icon: GitGraph },
     { id: '3d', label: '3D Cube', icon: Box },
-    { id: 'layer', label: 'LL Cycles', icon: CircleDot },
+    { id: '2d', label: '2D Rails (Voxygen)', icon: GitGraph },
   ];
 
   return (
@@ -123,8 +119,6 @@ export default function TrainerView({
           setupAlg={phase !== 'CASE_SELECTION' ? setupAlg : ''}
           alg={phase === 'REVIEW' && activeCase ? activeCase.alg : ''}
           view={cubeView}
-          caseId={activeCase?.id}
-          facelets={facelets}
           lastMove={lastMove}
           onLayerClick={onFeedMove}
         />
