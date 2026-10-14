@@ -169,6 +169,7 @@ export const NavBar: React.FC<NavBarProps> = ({
           <button
             onClick={onConnect}
             disabled={connectionStatus === 'connecting'}
+            aria-label={connectionStatus === 'connecting' ? 'Connecting cube' : 'Connect Cube'}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-lg transition-colors shadow-sm"
           >
             {connectionStatus === 'connecting' ? (

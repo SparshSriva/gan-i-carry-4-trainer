@@ -28,3 +28,9 @@ See [catalog provenance](./ALGORITHM_CATALOG.md) and [official scramble setup](.
 ![Named solve groups](./solve-groups-preview.png)
 
 See [first hardware test](./HARDWARE_TEST.md).
+
+## Native Bluetooth bridge
+
+![Native cube connection](./native-bridge-preview.png)
+
+See [native bridge setup](./NATIVE_BRIDGE.md).

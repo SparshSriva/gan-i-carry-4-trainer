@@ -29,7 +29,7 @@ The sourced catalog replaces the starter entries with 41 basic F2L, 57 OLL, and 
 
 ## Verification
 
-- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (32 tests).
+- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (39 tests).
 - `npm run build`: TypeScript and production Vite bundle.
 - `npm run lint`: ESLint, including the active Voxygen component.
 - Browser acceptance: Sune setup, repeated wrong execution turns staying in EXECUTING, recovery followed by solved completion, library search, populated analytics, repeated rail turns, single-event rail controls, mouse dragging, roll adjustment, keyboard view alignment without new puzzle moves, and alignment persistence across view changes.
@@ -76,4 +76,12 @@ Input routing now accepts GAN turns only on the active timer/trainer view and on
 
 The status banner exposes reported solved/unsolved snapshots, the last raw-to-logical move, and serial number. FACELETS is diagnostic only: arbitrary snapshot hydration is still absent. A known physically solved origin, static calibrated grip, and outer-face-only input are required for the first acceptance test. Automatic regrips, hardware slice/wide interpretation, camera pose tracking, and clock regression using cube timestamps remain future work. Host timing is the current timing source. Existing frame tests cover all 24 orientations; simulated stream tests do not establish actual device compatibility.
 
-Validation: 32 regression tests, lint, TypeScript/production build; browser checks verified group isolation, active group locking, custom group creation and persistence, and a reconstructed simulator solve in OH. Physical discovery, MAC negotiation, real packet timing/order, battery, reset, disconnect/reconnect, and face-label conventions still require the user's cube test. See [hardware acceptance procedure](./docs/HARDWARE_TEST.md).
+Validation: 39 regression tests, lint, TypeScript/production build; browser checks verified group isolation, active group locking, custom group creation and persistence, and a reconstructed simulator solve in OH. Physical discovery, MAC negotiation, real packet timing/order, battery, reset, disconnect/reconnect, and face-label conventions still require the user's cube test. See [hardware acceptance procedure](./docs/HARDWARE_TEST.md).
+
+## Native BLE transport
+
+`scripts/bridge/ble_worker.py` owns OS discovery/GATT via Bleak; `native-transport.mjs` adapts it to the maintained GAN library; `server.mjs` owns connection leases, local endpoints, sequence buffering and cleanup. `nativeBridge.ts` delivers normalized events to the existing Bluetooth manager so integrity/frame/trainer/timer logic is shared. Monotonic timestamps are converted to epoch time before recording in both transports. Direct service-discovery disconnects now show actionable guidance. The bridge retains the same protocol/model limitations and requires physical acceptance. See docs/NATIVE_BRIDGE.md.
+
+`gattDiscovery.ts` temporarily wraps only the selected device’s service-discovery method during direct connection setup. It uses Chromium-style exponential backoff for transient setup failures, restores the method after setup, and never reopens the picker. Tests cover transient recovery, bounded failures, permission errors, and restoration. Latest checks: 39 passing tests and live loopback HTTP integration, lint, TypeScript, and production build. The encrypted fixtures include initial facelets and ordered turns.
+
+Connection initialization was audited against the maintainer sample, csTimer behavior, Chromium reconnect example and Bleak API. See [connection audit](./docs/CONNECTION_AUDIT.md). Readiness now requires decoded facelets; failed setup closes partial links.

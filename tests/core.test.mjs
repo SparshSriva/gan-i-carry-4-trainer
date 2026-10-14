@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { puzzles } from 'cubing/puzzles';
+import { Subject } from 'rxjs';
 
 // Transpile the app's pure TypeScript modules with its installed compiler.
 async function sourceModule(path, imports = {}) {
@@ -19,6 +20,39 @@ const catalogUrl=`data:text/javascript;base64,${Buffer.from('export default '+JS
 const databaseModule=await sourceModule('data/algDatabase.ts',{'./algorithmCatalog.json':catalogUrl});
 const { ALL_CASES }=databaseModule.exports;
 const puzzle = await puzzles['3x3x3'].kpuzzle();
+const {stabilizeGattDiscovery}=(await sourceModule('utils/gattDiscovery.ts')).exports;
+test('GATT discovery reconnects the selected device after a transient disconnect',async()=>{
+  let reads=0,connects=0;const stages=[];
+  const gatt={connected:true,connect:async()=>{connects++;gatt.connected=true;return gatt;},disconnect:()=>{gatt.connected=false;},getPrimaryServices:async()=>{if(++reads===1)throw new Error('GATT Server is disconnected');return [{uuid:'00000010-0000-fff7-fff6-fff5fff4fff0'}];}};
+  const original=gatt.getPrimaryServices;const restore=stabilizeGattDiscovery(gatt,s=>stages.push(s),async()=>{});
+  assert.deepEqual(await gatt.getPrimaryServices(),[{uuid:'00000010-0000-fff7-fff6-fff5fff4fff0'}]);assert.equal(connects,1);assert.equal(reads,2);assert.ok(stages.some(s=>/2\/3/.test(s)));restore();assert.equal(gatt.getPrimaryServices,original);
+});
+test('GATT service discovery retries are bounded and permission failures are not retried',async()=>{
+  for(const name of ['NetworkError','SecurityError']){
+    let reads=0;const gatt={connected:true,connect:async()=>gatt,disconnect:()=>{},getPrimaryServices:async()=>{reads++;const error=new Error('GATT failure');error.name=name;throw error;}};
+    const restore=stabilizeGattDiscovery(gatt,()=>{},async()=>{});await assert.rejects(()=>gatt.getPrimaryServices());assert.equal(reads,name==='NetworkError'?3:1);restore();
+  }
+});
+test('connection manager closes partial GATT links and refuses failed startup instead of reporting ready',async()=>{
+  const shim=`data:text/javascript;base64,${Buffer.from('export const connectGanCube=(provider)=>globalThis.__ganConnectionFixture(provider);').toString('base64')}`;
+  const bridge=`data:text/javascript;base64,${Buffer.from('export const connectNativeBridge=()=>{throw new Error("not selected");};').toString('base64')}`;
+  const guard=await sourceModule('utils/ganMoveGuard.ts'),gatt=await sourceModule('utils/gattDiscovery.ts');
+  const {ganBluetooth}= (await sourceModule('utils/ganBluetooth.ts',{'gan-web-bluetooth':shim,'./nativeBridge':bridge,'./ganMoveGuard':guard.url,'./gattDiscovery':gatt.url,'./connectionHandshake.mjs':new URL('../src/utils/connectionHandshake.mjs',import.meta.url).href})).exports;
+  const originalNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator'),originalStorage=globalThis.localStorage;
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{bluetooth:{}}});globalThis.localStorage={getItem:()=> '01:02:03:04:05:06'};
+  let disconnects=0;const device={id:'test',gatt:{connected:true,disconnect:()=>{device.gatt.connected=false;disconnects++;},getPrimaryServices:async()=>[],connect:async()=>device.gatt}};
+  const originalDiscovery=device.gatt.getPrimaryServices;
+  try {
+    globalThis.__ganConnectionFixture=async provider=>{await provider(device,false);throw new Error('service discovery failed');};
+    await assert.rejects(()=>ganBluetooth.connect({}),/service discovery failed/);assert.equal(disconnects,1);assert.equal(ganBluetooth.isConnected(),false);assert.equal(device.gatt.getPrimaryServices,originalDiscovery);
+    const events$=new Subject();let closed=false;
+    globalThis.__ganConnectionFixture=async()=>({deviceName:'fixture',events$,sendCubeCommand:async()=>{throw new Error('startup write failed');},disconnect:async()=>{closed=true;}});
+    await assert.rejects(()=>ganBluetooth.connect({}),/startup write failed/);assert.equal(closed,true);assert.equal(ganBluetooth.isConnected(),false);assert.equal(events$.observed,false);
+  }finally{
+    delete globalThis.__ganConnectionFixture;if(originalNavigator)Object.defineProperty(globalThis,'navigator',originalNavigator);else delete globalThis.navigator;
+    if(originalStorage===undefined)delete globalThis.localStorage;else globalThis.localStorage=originalStorage;
+  }
+});
 const solved = p => p.experimentalIsSolved({ ignorePuzzleOrientation: true, ignoreCenterOrientation: true });
 const assistant = alg => new ScrambleAssistant(alg, () => {});
 

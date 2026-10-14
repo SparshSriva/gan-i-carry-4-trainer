@@ -12,7 +12,7 @@ Updated October 14, 2026. Current implementation and milestone status are record
 - Replace Library and Analytics placeholders with searchable cases and local practice history.
 - Respect weighted practice filters, hide case identity during blind recognition, and calculate XP deterministically.
 - Keep Bluetooth callbacks current and cache MAC addresses per device.
-- Verify production build, lint, 32 regression tests, and the documented browser acceptance flows.
+- Verify production build, lint, 39 regression tests, and the documented browser acceptance flows.
 
 ## Next: physical cube reliability
 
@@ -50,3 +50,7 @@ The general Solve Timer now saves scramble/solution reconstructions, supports lo
 Official TNoodle-WCA random-state generation is implemented through the local signed runtime. Next timer work: +2/DNF editing with an audit trail, optional inspection rules, solution annotations, import validation, and CFOP/fluency splits computed from saved move/state sequences. Future AI assistance should operate on a versioned reconstruction with clear input provenance and request user consent before transmitting records to an external service.
 
 Named timer groups and group-specific averages are implemented. Circular packet serial checks, duplicate suppression, untimed recovery detection, view/source input isolation, and visible hardware diagnostics are implemented. Real-device acceptance and initial state hydration remain outstanding; see docs/HARDWARE_TEST.md.
+
+Native local BLE bridge implemented as an alternative to Web Bluetooth. Next: real-device native/direct comparison, measured transport latency, Linux/macOS acceptance, packaging/service lifecycle, and reconciling FACELETS with the logical model.
+
+Connection initialization was audited against the maintainer sample, csTimer behavior, Chromium reconnect example and Bleak API. See [connection audit](./docs/CONNECTION_AUDIT.md). Readiness now requires decoded facelets; failed setup closes partial links.

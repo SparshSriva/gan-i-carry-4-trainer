@@ -4,12 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/core.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/connection.test.mjs tests/bridge.test.mjs",
     "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "node scripts/dev.mjs --preview",
-    "setup:scrambles": "node scripts/tnoodle-runtime.mjs --setup"
+    "setup:scrambles": "node scripts/tnoodle-runtime.mjs --setup",
+    "setup:bridge": "node scripts/setup-bridge.mjs",
+    "bridge": "node scripts/bridge/server.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

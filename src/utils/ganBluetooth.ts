@@ -11,6 +11,9 @@
 import { connectGanCube, GanCubeConnection, GanCubeEvent } from 'gan-web-bluetooth';
 import { Subscription } from 'rxjs';
 import { GanMoveGuard } from './ganMoveGuard';
+import { connectNativeBridge } from './nativeBridge';
+import { stabilizeGattDiscovery } from './gattDiscovery';
+import { initializeCubeConnection } from './connectionHandshake.mjs';
 
 export interface BleHardwareInfo {
   hardwareName?: string;
@@ -28,6 +31,8 @@ export interface GanBluetoothCallbacks {
   onDisconnect?: () => void;
   onMacPrompt?: (device: BluetoothDevice) => Promise<string | null>;
   onIntegrityIssue?: (message:string) => void;
+  bridgeDevice?:{id:string;mac?:string};
+  onConnectionProgress?:(message:string)=>void;
 }
 
 class GanBluetoothManager {
@@ -35,6 +40,7 @@ class GanBluetoothManager {
   private subscription: Subscription | null = null;
   private moveGuard=new GanMoveGuard();
   private trackingSuspended=false;
+  private connecting=false;
 
   /** Check if the current browser environment supports the Web Bluetooth API */
   public isSupported(): boolean {
@@ -45,16 +51,23 @@ class GanBluetoothManager {
    * Connect to a nearby GAN Smart Cube via Web Bluetooth.
    */
   public async connect(callbacks: GanBluetoothCallbacks): Promise<GanCubeConnection> {
-    if (!this.isSupported()) {
+    if(this.connecting || this.connection)throw new Error('A cube connection is already active or being initialized.');
+    if (!callbacks.bridgeDevice && !this.isSupported()) {
       throw new Error(
         'Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Brave on desktop/laptop.'
       );
     }
 
+    this.connecting=true;
+    let restoreDiscovery:(()=>void)|undefined;
+    let selectedDevice:BluetoothDevice|undefined;
     // Custom MAC Address provider with localStorage caching and fallback callback
     const customMacProvider = async (device: BluetoothDevice, isFallbackCall?: boolean): Promise<string | null> => {
+      selectedDevice=device;
+      if(!isFallbackCall && device.gatt && !restoreDiscovery)restoreDiscovery=stabilizeGattDiscovery(device.gatt,callbacks.onConnectionProgress);
       const storageKey = `gan_cube_mac_${device.id}`;
-      const cachedMac = localStorage.getItem(storageKey);
+      let cachedMac:string|null=null;
+      try {const stored=localStorage.getItem(storageKey);if(/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(stored??''))cachedMac=stored;}catch{/* Cache availability must not block Bluetooth. */}
 
       // The first provider call precedes the library's advertisement lookup.
       // Only return a cached address here; manual entry belongs to its fallback.
@@ -64,7 +77,7 @@ class GanBluetoothManager {
       if (callbacks.onMacPrompt) {
         const userEnteredMac = await callbacks.onMacPrompt(device);
         if (userEnteredMac) {
-          localStorage.setItem(storageKey, userEnteredMac);
+          try{localStorage.setItem(storageKey, userEnteredMac);}catch{/* An entered address still works without caching. */}
           return userEnteredMac;
         }
       }
@@ -73,7 +86,7 @@ class GanBluetoothManager {
     };
 
     try {
-      const conn = await connectGanCube(customMacProvider);
+      const conn = callbacks.bridgeDevice?await connectNativeBridge(callbacks.bridgeDevice.id,callbacks.bridgeDevice.mac):await connectGanCube(customMacProvider);
       this.connection = conn;
       this.moveGuard.reset();this.trackingSuspended=false;
 
@@ -84,6 +97,7 @@ class GanBluetoothManager {
           this.handleEvent(event, callbacks);
         },
         error: (err) => {
+          if(this.connection!==conn)return;
           console.error('GAN BLE event stream error:', err);
           void this.disconnect();
           if (callbacks.onDisconnect) callbacks.onDisconnect();
@@ -95,22 +109,19 @@ class GanBluetoothManager {
         },
       });
 
-      // Request initial facelets and battery info
-      try {
-        await conn.sendCubeCommand({ type: 'REQUEST_HARDWARE' });
-        await conn.sendCubeCommand({ type: 'REQUEST_BATTERY' });
-        await conn.sendCubeCommand({ type: 'REQUEST_FACELETS' });
-      } catch (cmdErr) {
-        console.warn('Initial command dispatch failed:', cmdErr);
-      }
+      const initialFacelets=await initializeCubeConnection(conn,callbacks.onConnectionProgress);
 
       if(this.connection!==conn)throw new Error('The cube disconnected while connecting. Try connecting again.');
+      callbacks.onFacelets?.(initialFacelets);
 
       return conn;
     } catch (err) {
       await this.disconnect();
+      // connectGanCube can fail before returning its connection object.
+      // Close the selected device's partial GATT link in that case as well.
+      if(selectedDevice?.gatt?.connected)selectedDevice.gatt.disconnect();
       throw err;
-    }
+    }finally{restoreDiscovery?.();this.connecting=false;}
   }
 
   private handleEvent(event: GanCubeEvent, callbacks: GanBluetoothCallbacks) {
@@ -127,7 +138,9 @@ class GanBluetoothManager {
           }
         }
         if (callbacks.onMove) {
-          callbacks.onMove(event.move, event.localTimestamp ?? Date.now(), event.serial);
+          const stamp=event.localTimestamp??Date.now();
+          const epoch=stamp>=1e12?stamp:Date.now()-performance.now()+stamp;
+          callbacks.onMove(event.move, epoch, event.serial);
         }
         break;
 

@@ -18,6 +18,7 @@ import SolveTimerView from './components/SolveTimerView';
 import { useSolveTimer } from './hooks/useSolveTimer';
 import { loadGrip, saveGrip, physicalToGrip } from './utils/gripOrientation';
 import { ganBluetooth } from './utils/ganBluetooth';
+import BridgeConnectionModal from './components/BridgeConnectionModal';
 
 export default function App() {
   const [grip,setGrip]=useState(loadGrip);
@@ -30,7 +31,10 @@ export default function App() {
   const [hardwareIssue,setHardwareIssue]=useState('');
   const [hardwareState,setHardwareState]=useState('Waiting for cube state');
   const [lastHardwareMove,setLastHardwareMove]=useState('No turns received');
+  const [connectionError,setConnectionError]=useState('');
   const [keybindsOpen, setKeybindsOpen] = useState(false);
+  const [transport,setTransport]=useState<'web'|'bridge'>(()=>{try{return localStorage.getItem('gan_connection_transport')==='bridge'?'bridge':'web';}catch{return 'web';}});
+  const [bridgeOpen,setBridgeOpen]=useState(false);
 
   // MAC Address Modal state for browser BLE sandboxing fallback
   const [macModal, setMacModal] = useState<{
@@ -42,15 +46,15 @@ export default function App() {
     deviceName: 'GAN Smart Cube',
   });
 
-  const [state, actions] = useTrainerState(view === 'trainer' && !keybindsOpen && !macModal.isOpen,grip);
-  const timer=useSolveTimer(view==='timer' && !keybindsOpen && !macModal.isOpen,state.simulatorMode,state.keybindPreset,grip);
+  const [state, actions] = useTrainerState(view === 'trainer' && !keybindsOpen && !macModal.isOpen && !bridgeOpen,grip);
+  const timer=useSolveTimer(view==='timer' && !keybindsOpen && !macModal.isOpen && !bridgeOpen,state.simulatorMode,state.keybindPreset,grip);
   const timerRef=useRef(timer);timerRef.current=timer;
   const viewRef=useRef(view);viewRef.current=view;
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
   const simulatorRef=useRef(state.simulatorMode);simulatorRef.current=state.simulatorMode;
 
-  const handleConnect = async () => {
+  const handleConnect = async (bridgeDevice?:{id:string;mac?:string}) => {
     // If already connected, toggle disconnect
     if (connectionStatus === 'connected') {
       await ganBluetooth.disconnect();
@@ -62,7 +66,8 @@ export default function App() {
       return;
     }
 
-    if (!ganBluetooth.isSupported()) {
+    if(transport==='bridge' && !bridgeDevice){setBridgeOpen(true);return;}
+    if (transport==='web' && !ganBluetooth.isSupported()) {
       alert(
         'Web Bluetooth is not supported in this browser.\nPlease use Google Chrome, Microsoft Edge, or Brave on desktop or laptop.'
       );
@@ -70,10 +75,14 @@ export default function App() {
     }
 
     setConnectionStatus('connecting');
+    setConnectionError('');
+    let connectionStage=bridgeDevice?'Opening native cube connection':'Selecting cube and resolving its MAC';
     setHardwareIssue('');setHardwareState('Waiting for cube state');setLastHardwareMove('No turns received');
 
     try {
       const conn = await ganBluetooth.connect({
+        bridgeDevice,
+        onConnectionProgress:message=>{connectionStage=message;setHardwareState(message);},
         onMove: (move, timestamp,serial) => {
           const logical=physicalToGrip(move,gripRef.current);setLastHardwareMove(`GAN ${move} → ${logical} · packet ${serial}`);
           if(simulatorRef.current)return;
@@ -111,13 +120,15 @@ export default function App() {
       actionsRef.current.setSimulatorMode(false);
       setConnectionStatus('connected');
       setCubeName(conn.deviceName || 'GAN i Carry 4');
+      setBridgeOpen(false);
     } catch (err: unknown) {
       console.error('Bluetooth connection error:', err);
       setConnectionStatus('disconnected');
       const error = err as { name?: string; message?: string };
       // Ignore user cancellation errors from browser device picker
       if (error.name !== 'NotFoundError' && !error.message?.includes('User cancelled')) {
-        alert(error.message || 'Failed to connect to GAN cube.');
+        setConnectionError(`${connectionStage}: ${error.message || 'Connection failed'}`);
+        alert(error.message?.includes('GATT Server is disconnected')?'The cube disconnected before Bluetooth service discovery. Close CubeStation and other cube apps, wake the cube, and retry nearby. You can also select Local bridge to use native Bluetooth.':error.message || 'Failed to connect to GAN cube.');
       }
     }
   };
@@ -171,13 +182,16 @@ export default function App() {
         simulatorMode={state.simulatorMode}
         soundEnabled={state.soundEnabled}
         xpState={state.xpState}
-        onConnect={handleConnect}
+        onConnect={()=>void handleConnect()}
         onSyncSolved={handleSyncSolved}
         onToggleSimulator={()=>{timer.interrupt();actions.syncSolvedState();actions.toggleSimulator();}}
         onToggleSound={actions.toggleSound}
         onOpenKeybinds={() => setKeybindsOpen(true)}
       />
+      <div className="px-4 py-2 border-b border-zinc-800 text-xs text-zinc-400 flex flex-wrap gap-2 items-center"><label>Cube connection <select aria-label="Cube connection method" disabled={connectionStatus!=='disconnected'} value={transport} onChange={e=>{const value=e.target.value as 'web'|'bridge';setTransport(value);try{localStorage.setItem('gan_connection_transport',value);}catch{/* preference is optional */}}} className="ml-2 bg-zinc-900 border border-zinc-700 rounded p-1 text-white"><option value="web">Direct Web Bluetooth</option><option value="bridge">Local bridge · any browser</option></select></label>{transport==='bridge' && <span>Start npm run bridge, then Connect Cube.</span>}</div>
 
+      {connectionStatus==='connecting' && <p role="status" className="px-4 py-2 text-xs text-indigo-300">{hardwareState} Keep the cube awake and nearby.</p>}
+      {connectionStatus==='disconnected' && connectionError && <p role="alert" className="px-4 py-2 text-xs text-amber-300">{connectionError}</p>}
       {connectionStatus==='connected' && <div role="status" className={`px-4 py-2 text-xs border-b ${hardwareIssue?'bg-amber-950/50 border-amber-800 text-amber-200':'bg-zinc-900 border-zinc-800 text-zinc-400'}`}>
         {hardwareIssue || `${hardwareState} · ${lastHardwareMove}. Start solved, choose your grip, then Sync Solved. Keep that physical grip during the attempt.`}
       </div>}
@@ -233,6 +247,7 @@ export default function App() {
         onSubmit={handleMacSubmit}
         onCancel={handleMacCancel}
       />
+      {bridgeOpen && <BridgeConnectionModal connecting={connectionStatus==='connecting'} onClose={()=>setBridgeOpen(false)} onConnect={(id,mac)=>void handleConnect({id,mac})}/>}
     </div>
   );
 }

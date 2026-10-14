@@ -66,3 +66,9 @@ npm run build
 ```
 
 Before your first physical test, follow [HARDWARE_TEST.md](./docs/HARDWARE_TEST.md). The connection status shows raw/logical turns and packet serials. Stream gaps or untimed recovered moves pause training; start from a physically solved cube and Sync Solved to recover.
+
+## Browser-independent Bluetooth
+
+Use `npm run setup:bridge` once and `npm run bridge` in a second terminal. Choose Local bridge in the app and select a cube from the native scan. Direct Web Bluetooth remains available. See [native bridge setup and validation](./docs/NATIVE_BRIDGE.md). Physical compatibility still requires the first cube acceptance test.
+
+Connection initialization was audited against the maintainer sample, csTimer behavior, Chromium reconnect example and Bleak API. See [connection audit](./docs/CONNECTION_AUDIT.md). Readiness now requires decoded facelets; failed setup closes partial links.
