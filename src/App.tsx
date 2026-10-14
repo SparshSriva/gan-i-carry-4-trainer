@@ -57,11 +57,14 @@ export default function App() {
             lastXpEvent={state.lastXpEvent}
             streak={state.streak}
             simulatorMode={state.simulatorMode}
+            facelets={state.facelets}
+            lastMove={state.lastMove}
             onSelectCase={actions.selectCase}
             onNextCase={actions.nextCase}
             onNextFromReview={handleNextFromReview}
             onStatusChange={actions.updateCaseStatus}
             onDismissXp={actions.dismissXpBanner}
+            onFeedMove={actions.feedMove}
           />
         )}
 

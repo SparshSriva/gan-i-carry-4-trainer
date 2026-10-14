@@ -1,5 +1,6 @@
 /**
- * TrainerView.tsx — Two-column training workspace with multi-mode visualizer,
+ * TrainerView.tsx — Two-column training workspace with multi-mode visualizer
+ * (including 3D WebGL Cube and 2D Nine-Circles Permutation Graph side-by-side),
  * dynamic scramble assistant, telemetry, gamified rewards, and keybind reminders.
  */
 
@@ -14,7 +15,7 @@ import StateBanner from './StateBanner';
 import ScrambleStrip from './ScrambleStrip';
 import CaseCard from './CaseCard';
 import CaseSelector from './CaseSelector';
-import { Box, CircleDot, Columns, Sparkles, Award } from 'lucide-react';
+import { Box, CircleDot, Columns, Sparkles, Award, GitGraph } from 'lucide-react';
 
 interface TrainerViewProps {
   phase: TrainerPhase;
@@ -25,11 +26,14 @@ interface TrainerViewProps {
   lastXpEvent: XpEvent | null;
   streak: number;
   simulatorMode: boolean;
+  facelets: string;
+  lastMove: string | null;
   onSelectCase: (c: AlgCase) => void;
   onNextCase: () => void;
   onNextFromReview: () => void;
   onStatusChange: (id: string, status: AlgCase['status']) => void;
   onDismissXp: () => void;
+  onFeedMove: (move: string) => void;
 }
 
 export default function TrainerView({
@@ -41,13 +45,17 @@ export default function TrainerView({
   lastXpEvent,
   streak,
   simulatorMode,
+  facelets,
+  lastMove,
   onSelectCase,
   onNextCase,
   onNextFromReview,
   onStatusChange,
   onDismissXp,
+  onFeedMove,
 }: TrainerViewProps) {
-  const [cubeView, setCubeView] = useState<ViewMode>('3d');
+  // Default to dual split view: 3D cube + 2D 9-circles permutation graph alongside!
+  const [cubeView, setCubeView] = useState<ViewMode>('split');
   const [hideAlg, setHideAlg] = useState(false);
   const [hintRevealed, setHintRevealed] = useState(false);
 
@@ -76,19 +84,19 @@ export default function TrainerView({
   const setupAlg = activeCase ? invertAlg(activeCase.alg) : '';
 
   const viewModes: { id: ViewMode; label: string; icon: typeof Box }[] = [
+    { id: 'split', label: 'Dual View (3D + 2D Graph)', icon: Columns },
+    { id: 'circles', label: '9-Circles Graph', icon: GitGraph },
     { id: '3d', label: '3D Cube', icon: Box },
-    { id: 'top', label: '2D Top-Down', icon: CircleDot },
-    { id: 'graph', label: 'Circular Diagram', icon: CircleDot },
-    { id: 'split', label: 'Dual View', icon: Columns },
+    { id: 'layer', label: 'LL Cycles', icon: CircleDot },
   ];
 
   return (
     <div className="flex h-full gap-4 p-4 overflow-hidden bg-zinc-950">
       {/* ── Left Column: Cube & Visualizer + Telemetry ─────────────────────── */}
-      <div className="flex flex-col gap-3 w-[45%] max-w-[480px] min-w-[300px]">
+      <div className="flex flex-col gap-3 w-[48%] max-w-[540px] min-w-[320px]">
         {/* Visualizer Mode Switcher */}
         <div className="flex items-center justify-between bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {viewModes.map(m => {
               const Icon = m.icon;
               return (
@@ -115,6 +123,9 @@ export default function TrainerView({
           alg={phase === 'REVIEW' && activeCase ? activeCase.alg : ''}
           view={cubeView}
           caseId={activeCase?.id}
+          facelets={facelets}
+          lastMove={lastMove}
+          onLayerClick={onFeedMove}
         />
 
         {/* Telemetry Bar */}

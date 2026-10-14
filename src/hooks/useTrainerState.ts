@@ -5,6 +5,7 @@
  * - ScrambleAssistant state machine with dynamic error recovery
  * - HyperSpeedCube / Standard Ergonomic keyboard simulation
  * - XP, leveling, streak tracking, and gamified achievement feedback
+ * - Real-time 54-facelet mathematical permutation tracking for NavaCakraYantra
  * - Synthesized sound effects (Web Audio API)
  */
 
@@ -17,6 +18,8 @@ import { selectNextCase } from '../utils/weightedSelection';
 import { KeybindPresetId, KEYBIND_PRESETS } from '../utils/keybinds';
 import { playTurnClick, playErrorBuzz, playSuccessChime, isSoundEnabled, setSoundEnabled } from '../utils/soundEffects';
 import { useXpSystem, XpState, XpEvent } from './useXpSystem';
+import { applyFaceletMove, applyFaceletAlg } from '../utils/faceletSimulator';
+import { SOLVED_FACELETS } from '../data/navaCakraGeometry';
 
 export interface TrainerState {
   phase: TrainerPhase;
@@ -30,6 +33,8 @@ export interface TrainerState {
   xpState: XpState;
   lastXpEvent: XpEvent | null;
   streak: number;
+  facelets: string;        // 54-char mathematical facelet string
+  lastMove: string | null; // latest move executed
 }
 
 export interface TrainerActions {
@@ -54,6 +59,8 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   const [keybindPreset, setKeybindPresetState] = useState<KeybindPresetId>('hyperspeedcube');
   const [soundActive, setSoundActive] = useState<boolean>(() => isSoundEnabled());
   const [lastXpEvent, setLastXpEvent] = useState<XpEvent | null>(null);
+  const [facelets, setFacelets] = useState<string>(SOLVED_FACELETS);
+  const [lastMove, setLastMove] = useState<string | null>(null);
 
   const { xpState, recordAttempt } = useXpSystem();
 
@@ -119,6 +126,8 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     if (!activeCase) return;
 
     playTurnClick();
+    setLastMove(move);
+    setFacelets(prev => applyFaceletMove(prev, move));
 
     if (phase === 'SCRAMBLING' || phase === 'ERROR_RECOVERY') {
       assistantRef.current?.feedMove(move);
@@ -190,7 +199,13 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     hadMistakeRef.current = false;
     setLastXpEvent(null);
     setActiveCase(c);
+    setLastMove(null);
+
+    // Compute initial scrambled facelets for the 2D permutation graph
     const scramble = invertAlg(c.alg);
+    const initialScrambledFacelets = applyFaceletAlg(SOLVED_FACELETS, scramble);
+    setFacelets(initialScrambledFacelets);
+
     const assistant = new ScrambleAssistant(scramble, setScrambleSnap);
     assistantRef.current = assistant;
     setScrambleSnap(assistant.snapshot());
@@ -210,6 +225,8 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     setActiveCase(null);
     setScrambleSnap(null);
     setLastXpEvent(null);
+    setFacelets(SOLVED_FACELETS);
+    setLastMove(null);
   }, []);
 
   const toggleSimulator = useCallback(() => {
@@ -232,6 +249,8 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     xpState,
     lastXpEvent,
     streak: xpState.streak,
+    facelets,
+    lastMove,
   };
 
   const actions: TrainerActions = {
