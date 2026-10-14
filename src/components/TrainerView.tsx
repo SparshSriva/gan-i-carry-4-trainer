@@ -4,6 +4,7 @@
  * dynamic scramble assistant, telemetry, gamified rewards, and keybind reminders.
  */
 
+import type { GripOrientation } from '../utils/gripOrientation';
 import { useState, useEffect, useCallback } from 'react';
 import { TrainerPhase, AlgCase, AttemptResult } from '../types';
 import { ScrambleAssistantSnapshot } from '../utils/ScrambleAssistant';
@@ -18,6 +19,8 @@ import { Box, Columns, Sparkles, Award, GitGraph } from 'lucide-react';
 
 interface TrainerViewProps {
   phase: TrainerPhase;
+  grip:GripOrientation;
+  onGripChange:(g:GripOrientation)=>void;
   activeCase: AlgCase | null;
   scrambleSnap: ScrambleAssistantSnapshot | null;
   lastAttempt: AttemptResult | null;
@@ -36,6 +39,8 @@ interface TrainerViewProps {
 
 export default function TrainerView({
   phase,
+  grip,
+  onGripChange,
   activeCase,
   scrambleSnap,
   lastAttempt,
@@ -119,6 +124,9 @@ export default function TrainerView({
         {/* Cube / Permutation Graph Canvas */}
         <CubeCanvas
           moveHistory={moveHistory}
+          grip={grip}
+          onGripChange={onGripChange}
+          gripLocked={!['CASE_SELECTION','REVIEW'].includes(phase)}
           view={cubeView}
           interactive={simulatorMode && ['SCRAMBLING', 'ERROR_RECOVERY', 'RECOGNIZING', 'EXECUTING'].includes(phase)}
           onLayerClick={onFeedMove}
@@ -143,7 +151,7 @@ export default function TrainerView({
       {/* ── Right Column: Scramble Assistant + Case Card + Gamification ──── */}
       <div className="flex flex-col gap-3 flex-1 min-w-0 lg:overflow-y-auto">
         <StateBanner phase={phase} />
-        {phase === 'SCRAMBLING' && <p className="text-xs text-zinc-400">Start with a solved cube, white on top and green in front. Follow the setup below.</p>}
+        {phase === 'SCRAMBLING' && <p className="text-xs text-zinc-400">Start with a solved cube held in your selected up/front orientation. Follow the setup below.</p>}
         {phase === 'EXECUTING' && <p role="status" className="text-xs text-indigo-300">Keep solving. The attempt ends when the cube reaches the solved state.</p>}
 
         {/* Gamified XP Toast */}

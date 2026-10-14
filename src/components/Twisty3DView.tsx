@@ -16,6 +16,7 @@ export interface Twisty3DViewProps {
   visualization?: 'PG3D' | 'experimental-2D-LL' | '2D';
   className?: string;
   orientation?: CubeOrientation;
+  onSnap?: (pose: CubeOrientation) => void;
   onOrbitChange?: (yaw: number, pitch: number) => void;
 }
 
@@ -26,6 +27,7 @@ export const Twisty3DView: React.FC<Twisty3DViewProps> = ({
   className = '',
   orientation,
   onOrbitChange,
+  onSnap,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<TwistyPlayer | null>(null);
@@ -49,10 +51,11 @@ export const Twisty3DView: React.FC<Twisty3DViewProps> = ({
     if (!start) return;
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     const roll = start.pose.roll * Math.PI / 180;
+    poseRef.current = { ...start.pose, yaw: start.pose.yaw - (dx * Math.cos(roll) + dy * Math.sin(roll)) * 0.5, pitch: start.pose.pitch + (dy * Math.cos(roll) - dx * Math.sin(roll)) * 0.5 };
     onOrbitRef.current?.(start.pose.yaw - (dx * Math.cos(roll) + dy * Math.sin(roll)) * 0.5,
       start.pose.pitch + (dy * Math.cos(roll) - dx * Math.sin(roll)) * 0.5);
   };
-  const endDrag = () => { dragRef.current = null; setDragging(false); };
+  const endDrag = () => { if(dragRef.current && poseRef.current) onSnap?.(poseRef.current); dragRef.current = null; setDragging(false); };
 
   // Mount TwistyPlayer instance once per visualization mode
   useEffect(() => {

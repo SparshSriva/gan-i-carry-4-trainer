@@ -135,3 +135,52 @@ test('view alignment persists and invalid storage falls back to the default', as
     assert.deepEqual(orientation.loadOrientation(), orientation.DEFAULT_CUBE_ORIENTATION);
   } finally { if (original === undefined) delete globalThis.localStorage; else globalThis.localStorage = original; }
 });
+
+const gripModel=(await sourceModule('utils/gripOrientation.ts')).exports;
+test('all 24 solving frames map GAN sensor faces consistently with the displayed rotation',()=>{
+  const faces='URFDLB';let count=0;
+  for(const up of faces)for(const front of faces){const grip={up,front};if(!gripModel.validGrip(grip))continue;count++;
+    const q=gripModel.gripRotation(grip).join(' '),map=gripModel.gripMap(grip);
+    assert.equal(new Set(Object.values(map)).size,6);
+    for(const raw of faces){const local=gripModel.physicalToGrip(raw,grip);
+      assert.equal(solved(puzzle.defaultPattern().applyAlg(`${raw} ${q} ${local}'`)),true,`${up}/${front}: ${raw} -> ${local}`);
+      assert.equal(gripModel.physicalToGrip(`${raw}2`,grip),`${local}2`);
+    }
+  }assert.equal(count,24);
+});
+test('drag snapping picks a valid up/front frame',()=>{
+  assert.deepEqual(gripModel.snapGrip({yaw:30,pitch:35,roll:0},gripModel.DEFAULT_GRIP),gripModel.DEFAULT_GRIP);
+  assert.deepEqual(gripModel.snapGrip({yaw:120,pitch:0,roll:0},gripModel.DEFAULT_GRIP),{up:'U',front:'R'});
+  for(let yaw=-180;yaw<180;yaw+=30)for(let pitch=-80;pitch<90;pitch+=20)assert.equal(gripModel.validGrip(gripModel.snapGrip({yaw,pitch,roll:45},gripModel.DEFAULT_GRIP)),true);
+});
+const sessionModel=(await sourceModule('utils/solveSession.ts',{'./ScrambleAssistant':(await sourceModule('utils/ScrambleAssistant.ts',{'./moveUtils':moves.url})).url})).exports;
+test('general timer preserves scramble, frame, raw and logical solution events and timing',()=>{
+  const s=new sessionModel.SolveSession(puzzle,"R U",{up:'U',front:'R'},'gan');
+  s.feed('R',1000,'B');s.feed('U',1100,'U');assert.equal(s.phase,'ready');
+  assert.equal(s.feed("U'",1500,"U'"),null);
+  const r=s.feed("R'",2000,"B'");assert.equal(r.durationMs,500);assert.equal(r.inspectionMs,400);
+  assert.equal(r.scramble,'R U');assert.deepEqual(r.startingGrip,{up:'U',front:'R'});
+  assert.deepEqual(r.solution.map(m=>[m.move,m.rawMove,m.elapsedMs]),[["U'","U'",0],["R'","B'",500]]);
+  assert.equal(r.solved,true);assert.equal(s.feed('R',2100),null);assert.equal(s.finish(2200),null);
+});
+test('timer does not finish on incorrect moves and saves interrupted runs as DNF',()=>{
+  const s=new sessionModel.SolveSession(puzzle,'R U',gripModel.DEFAULT_GRIP,'simulator');s.useManualSetup(1000);s.feed('F',1500);s.feed('R',1600);assert.equal(s.phase,'solving');
+  const r=s.finish(2000,'dnf');assert.equal(r.solved,false);assert.equal(r.termination,'dnf');assert.equal(r.solution.length,2);
+});
+test('manual timer saves an explicitly unverified time with no fabricated moves',()=>{
+  const s=new sessionModel.SolveSession(puzzle,'R U',gripModel.DEFAULT_GRIP,'manual');s.useManualSetup(1000);s.start(2000);const r=s.finish(5000);
+  assert.equal(r.durationMs,3000);assert.equal(r.solved,false);assert.equal(r.source,'manual');assert.deepEqual(r.solution,[]);
+});
+test('scramble validation rejects unsupported notation and practice scrambles have 25 turns',()=>{
+  assert.throws(()=>sessionModel.validateScramble('R potato U'));assert.throws(()=>sessionModel.validateScramble(''));assert.throws(()=>sessionModel.validateScramble('x R'));
+  assert.equal(sessionModel.validateScramble(" R   U2 F' "),"R U2 F'");
+  const tokens=sessionModel.practiceScramble().split(' ');assert.equal(tokens.length,25);for(let i=1;i<tokens.length;i++)assert.notEqual(tokens[i][0],tokens[i-1][0]);
+});
+
+test('rolling solve averages trim extremes and handle DNF',()=>{
+  const records=[1000,2000,3000,4000,5000].map(durationMs=>({durationMs,termination:'solved'}));
+  assert.equal(sessionModel.rollingAverage(records,5),3000);
+  assert.equal(sessionModel.rollingAverage(records.slice(0,4),5),null);
+  assert.equal(sessionModel.rollingAverage([...records.slice(0,4),{durationMs:0,termination:'dnf'}],5),3000);
+  assert.equal(sessionModel.rollingAverage([...records.slice(0,3),{durationMs:0,termination:'dnf'},{durationMs:0,termination:'dnf'}],5),'DNF');
+});

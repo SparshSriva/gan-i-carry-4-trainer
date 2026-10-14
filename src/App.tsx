@@ -5,7 +5,7 @@
  * and Voxygen 2D stereographic permutation engine.
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { AppView, ConnectionStatus } from './types';
 import { useTrainerState } from './hooks/useTrainerState';
 import NavBar from './components/NavBar';
@@ -14,9 +14,15 @@ import { KeybindReferenceModal } from './components/KeybindReferenceModal';
 import { MacAddressModal } from './components/MacAddressModal';
 import AnalyticsView from './components/AnalyticsView';
 import LibraryView from './components/LibraryView';
+import SolveTimerView from './components/SolveTimerView';
+import { useSolveTimer } from './hooks/useSolveTimer';
+import { loadGrip, saveGrip, physicalToGrip } from './utils/gripOrientation';
 import { ganBluetooth } from './utils/ganBluetooth';
 
 export default function App() {
+  const [grip,setGrip]=useState(loadGrip);
+  useEffect(()=>saveGrip(grip),[grip]);
+  const gripRef=useRef(grip);gripRef.current=grip;
   const [view, setView] = useState<AppView>('trainer');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
@@ -34,6 +40,9 @@ export default function App() {
   });
 
   const [state, actions] = useTrainerState(view === 'trainer' && !keybindsOpen && !macModal.isOpen);
+  const timer=useSolveTimer(view==='timer' && !keybindsOpen && !macModal.isOpen,state.simulatorMode,state.keybindPreset,grip);
+  const timerRef=useRef(timer);timerRef.current=timer;
+  const viewRef=useRef(view);viewRef.current=view;
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
@@ -41,6 +50,8 @@ export default function App() {
     // If already connected, toggle disconnect
     if (connectionStatus === 'connected') {
       await ganBluetooth.disconnect();
+      timer.interrupt();
+      actions.syncSolvedState();
       setConnectionStatus('disconnected');
       setBatteryLevel(null);
       setCubeName(null);
@@ -58,7 +69,7 @@ export default function App() {
 
     try {
       const conn = await ganBluetooth.connect({
-        onMove: (move, timestamp) => actionsRef.current.feedMove(move, timestamp),
+        onMove: (move, timestamp) => {const logical=physicalToGrip(move,gripRef.current);if(viewRef.current==='timer')timerRef.current.feed(logical,timestamp,move);else actionsRef.current.feedMove(logical,timestamp);},
         onBattery: (level) => setBatteryLevel(level),
         onHardware: (info) => {
           if (info.hardwareName) {
@@ -67,6 +78,7 @@ export default function App() {
         },
         onDisconnect: () => {
           actionsRef.current.syncSolvedState();
+          timerRef.current.interrupt();
           setConnectionStatus('disconnected');
           setBatteryLevel(null);
           setCubeName(null);
@@ -82,6 +94,8 @@ export default function App() {
         },
       });
 
+      timerRef.current.interrupt();
+      actionsRef.current.syncSolvedState();
       actionsRef.current.setSimulatorMode(false);
       setConnectionStatus('connected');
       setCubeName(conn.deviceName || 'GAN i Carry 4');
@@ -101,6 +115,7 @@ export default function App() {
       await ganBluetooth.resetCube();
     }
     actions.syncSolvedState();
+    timer.interrupt();
   };
 
   const handleMacSubmit = (mac: string) => {
@@ -125,7 +140,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden">
       <NavBar
         view={view}
-        onViewChange={setView}
+        onViewChange={next=>{if(next!==view){timer.interrupt();actions.syncSolvedState();setView(next);}}}
         connectionStatus={connectionStatus}
         batteryLevel={batteryLevel}
         cubeName={cubeName}
@@ -134,7 +149,7 @@ export default function App() {
         xpState={state.xpState}
         onConnect={handleConnect}
         onSyncSolved={handleSyncSolved}
-        onToggleSimulator={actions.toggleSimulator}
+        onToggleSimulator={()=>{timer.interrupt();actions.syncSolvedState();actions.toggleSimulator();}}
         onToggleSound={actions.toggleSound}
         onOpenKeybinds={() => setKeybindsOpen(true)}
       />
@@ -144,6 +159,8 @@ export default function App() {
         {view === 'trainer' && state.puzzleReady && (
           <TrainerView
             phase={state.phase}
+            grip={grip}
+            onGripChange={setGrip}
             activeCase={state.activeCase}
             scrambleSnap={state.scrambleSnap}
             lastAttempt={state.lastAttempt}
@@ -161,6 +178,7 @@ export default function App() {
           />
         )}
 
+        {view==='timer' && <SolveTimerView timer={timer} grip={grip} onGripChange={setGrip} simulator={state.simulatorMode} connected={connectionStatus==='connected'} />}
         {view === 'library' && (
           <LibraryView cases={state.cases} onStatusChange={actions.updateCaseStatus}
             onTrain={c => { actions.selectCase(c); setView('trainer'); }} />

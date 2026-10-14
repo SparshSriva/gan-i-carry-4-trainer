@@ -82,4 +82,4 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
 // ─── App Navigation ────────────────────────────────────────────────────────────
 
-export type AppView = 'trainer' | 'library' | 'analytics';
+export type AppView = 'trainer' | 'timer' | 'library' | 'analytics';

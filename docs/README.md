@@ -5,6 +5,7 @@ Captured from the local app during development on October 14, 2026. Attempts and
 - [Voxygen-style rails](./voxygen-restored.png): full six-face projection with all rails fitted inside the canvas.
 - [3D alignment controls](./cube-orientation-controls.png): adjusted turn, tilt, and roll with persistent viewing orientation.
 - [Scrambled cube viewer](./cube-viewer-scrambled.png) and [solved cube viewer](./cube-viewer-solved.png): setup and completion states.
+- [Solve timer and reconstruction](./solve-timer-preview.png): saved scramble, solution replay, snapped frame, and session averages.
 - [Analytics](./analytics-preview.png): saved attempt statistics, time chart, and pause breakdown.
 
 The previews document visible UI verification. Physical GAN acceptance tests and camera orientation tracking remain pending; see [the roadmap](../ROADMAP.md).

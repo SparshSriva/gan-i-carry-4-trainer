@@ -30,15 +30,30 @@ Keyboard shortcuts follow the selected preset (open Keybinds for the full refere
 
 Every view follows received move history, including repeated turns. Select a case to start simulator practice. Blind recognition hides the case name and algorithm during recognition/execution; setup notation stays visible.
 
-To match your solving angle, drag the 3D cube with a mouse or touch. Use **Turn / Tilt / Roll** below the viewer for precise adjustment. Focus the 3D viewer and use arrow keys to turn or tilt it. **Reset view** restores the default perspective. Alignment survives case changes, view switching, and reloads in the same browser.
+To set your **solving frame**, drag the 3D cube and release: it snaps to one of the 24 valid up/front orientations. You can also choose **Up face** and **Front face** explicitly. GAN sensor face turns are interpreted relative to this saved frame. Choose your grip before selecting a case or starting a scramble; the frame locks during the attempt. While locked, dragging changes only the viewing angle. Turn/Tilt/Roll and Reset view remain available for viewing.
 
-Alignment changes the viewing angle only. It does not record turns, alter timing, or remap the cube's logical face labels. Hardware practice still requires the fixed logical orientation described below. Camera-based orientation tracking is planned; it is not enabled.
+Frame mapping assumes the standard GAN face labels/color scheme and a solved logical starting state. Arbitrary whole-cube regrips during hardware solves still require manual frame tracking or the planned camera tracking. Snap orientation is a manual calibration, not automatic gyroscope replacement.
+
+## General solving timer
+
+Open **Solve Timer** to practice a full 3×3 solve, independent of algorithm cases.
+
+1. Choose your up/front grip, then paste a scramble or generate a 25-turn practice scramble.
+2. Select **Use scramble**. In simulator or GAN mode, follow the guided setup; simulator users can also apply it instantly.
+3. The first solving turn starts the clock. Solved-state detection stops it and saves the reconstruction.
+4. Select a history entry to replay its scramble and step through the solution. **Export JSON** saves the complete records for backup or future analysis.
+
+Manual mode confirms a physical scramble and uses Space or the Start/Stop buttons. It saves time and scramble, explicitly records that completion was unverified, and does not fabricate a solution. Move reconstruction requires simulator or GAN input.
+
+History retains the latest 1,000 solves in this browser. Best, mean, ao5, and ao12 are shown; mean excludes DNF, and rolling averages trim extremes. There are no +2 penalties or enforced inspection limits yet. Changing tabs, input mode, disconnecting, or syncing during a running solve saves it as DNF. Generated scrambles are random-move practice sequences, not official random-state competition scrambles.
+
+See [solve record format and analysis plans](./docs/SOLVE_RECORDS.md). No AI service receives your data automatically.
 
 See the [viewer previews](./docs/README.md) and [development roadmap](./ROADMAP.md).
 
 ## Current limitations
 
-The catalog includes 21 PLL entries and an OLL starter set; full OLL/F2L and a standard-case audit remain pending. Hardware slice/wide/rotation decoding and initial facelet synchronization remain pending. Use outer-face-only algorithms with a fixed orientation for hardware trials. Bluetooth integration requires physical-device verification. Stored data stays in the current browser and is not synced between devices.
+The catalog includes 21 PLL entries and an OLL starter set; full OLL/F2L and a standard-case audit remain pending. Hardware slice/wide/rotation decoding and initial facelet synchronization remain pending. Use outer-face-only algorithms with the calibrated grip for hardware trials; frame mapping for physical regrips during a solve is not automatic. Bluetooth integration requires physical-device verification. Stored data stays in the current browser and is not synced between devices.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for milestone status and the next engineering tasks.
 

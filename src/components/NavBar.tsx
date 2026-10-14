@@ -36,6 +36,7 @@ export const NavBar: React.FC<NavBarProps> = ({
 }) => {
   const views: { id: AppView; label: string }[] = [
     { id: 'trainer', label: 'Trainer' },
+    { id: 'timer', label: 'Solve Timer' },
     { id: 'library', label: 'Algorithm Library' },
     { id: 'analytics', label: 'Analytics' },
   ];
