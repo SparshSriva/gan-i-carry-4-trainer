@@ -13,8 +13,9 @@ interface Props { timer:SolveTimerState; simulator:boolean; connected:boolean; g
 export default function SolveTimerView({timer,simulator,connected,grip,onGripChange}:Props){
   const [scramble,setScramble]=useState(''),[manual,setManual]=useState(false),[replay,setReplay]=useState<SolveRecord|null>(null),[step,setStep]=useState(0);
   const [generating,setGenerating]=useState(false),[generationError,setGenerationError]=useState(''),[provenance,setProvenance]=useState<ScrambleProvenance>({kind:'custom'});
+  const [groupName,setGroupName]=useState('');
   const alive=useRef(true),generationSeq=useRef(0);
-  const summary=solveSummary(timer.history);
+  const summary=solveSummary(timer.groupHistory);
   const format=(ms:number|'DNF'|null)=>ms===null?'—':ms==='DNF'?'DNF':`${(ms/1000).toFixed(2)}s`;
   const s=timer.session,active=Boolean(s && s.phase!=='review');
   const generate=async(begin=false)=>{
@@ -27,10 +28,16 @@ export default function SolveTimerView({timer,simulator,connected,grip,onGripCha
   const generateRef=useRef(generate);generateRef.current=generate;
   useEffect(()=>{alive.current=true;void generateRef.current();return()=>{alive.current=false;};},[]);
   const next=()=>void generate(true);
-  const exportRecords=()=>{const blob=new Blob([JSON.stringify({schemaVersion:1,exportedAt:new Date().toISOString(),solves:timer.history},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gan-i4-solves.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+  const exportRecords=()=>{const blob=new Blob([JSON.stringify({schemaVersion:1,exportedAt:new Date().toISOString(),groups:timer.groups,activeGroupId:timer.activeGroup.id,solves:timer.history},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gan-i4-solves.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   const replayMoves=replay?[...parseAlg(replay.scramble),...replay.solution.slice(0,step).map(m=>m.move)]:timer.moveHistory;
   return <section className="h-full overflow-y-auto p-4 space-y-4">
     <div><h1 className="text-xl font-bold">Solve timer</h1><p className="text-sm text-zinc-400">Save scrambles and timestamped solutions for reconstruction and future analysis.</p></div>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-2">
+      <label className="text-xs text-zinc-400 block">Solve group<select aria-label="Solve group" disabled={active || generating} value={timer.activeGroup.id} onChange={e=>{setReplay(null);setGroupName('');timer.selectGroup(e.target.value);}} className="block w-full sm:w-80 mt-1 bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-sm text-white">{timer.groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+      <p className="text-xs text-zinc-400">History and averages below belong to {timer.activeGroup.name}. Groups share the 3×3 scramble generator; OH and Roux are practice categories.</p>
+      <details className="text-xs text-zinc-400"><summary className="cursor-pointer">Create or rename a group</summary><div className="flex flex-wrap gap-2 mt-2"><input aria-label="Solve group name" maxLength={60} disabled={active || generating} value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder="e.g. Roux blocks" className="bg-zinc-950 border border-zinc-700 rounded p-2 text-white"/><button disabled={active || generating || !groupName.trim()} onClick={()=>{if(timer.addGroup(groupName)){setReplay(null);setGroupName('');}}} className="bg-indigo-600 rounded px-3 py-2 text-white disabled:opacity-40">Create group</button><button disabled={active || generating || !groupName.trim()} onClick={()=>{if(timer.renameGroup(groupName))setGroupName('');}} className="bg-zinc-800 rounded px-3 py-2 disabled:opacity-40">Rename current group</button></div></details>
+      {active && <p className="text-xs text-indigo-300">This attempt is saved to {s?.group.name}. Finish or cancel it before changing groups.</p>}
+    </div>
     <div className="grid lg:grid-cols-2 gap-4">
       <div className="space-y-3 max-w-[600px] w-full order-2 lg:order-1">
         <CubeCanvas moveHistory={replayMoves} view="3d" grip={replay?.startingGrip??grip} onGripChange={onGripChange} gripLocked={active || Boolean(replay)} interactive={!replay && simulator && active} onLayerClick={timer.feed}/>
@@ -56,8 +63,10 @@ export default function SolveTimerView({timer,simulator,connected,grip,onGripCha
         {replay && <div className="bg-zinc-900 rounded-xl p-4 space-y-2"><h2 className="font-semibold">Solution replay</h2><p className="text-xs text-zinc-400">Recorded scramble</p><p className="font-mono text-sm">{replay.scramble}</p><input aria-label="Replay move" type="range" min="0" max={replay.solution.length} value={step} onChange={e=>setStep(Number(e.target.value))} className="w-full"/><p className="text-xs text-zinc-400">{step}/{replay.solution.length} moves · {step?`${replay.solution[step-1].elapsedMs} ms`: 'Scrambled state'}</p><p className="font-mono text-sm">{replay.solution.map(m=>m.move).join(' ')||'Manual time only; no solution events.'}</p><button onClick={()=>setReplay(null)} className="text-xs text-indigo-300">Return to timer</button></div>}
         <div className="grid grid-cols-4 gap-2">{([['Best',summary.bestMs],['Mean',summary.meanMs],['ao5',summary.ao5],['ao12',summary.ao12]] as const).map(([label,value])=><div key={label} className="bg-zinc-900 border border-zinc-800 p-2 rounded-lg"><p className="text-xs text-zinc-500">{label}</p><p className="font-mono text-sm mt-1">{format(value)}</p></div>)}</div>
         <p className="text-[11px] text-zinc-500">Mean excludes DNF. Rolling averages trim the fastest and slowest result. No +2 penalties are applied.</p>
-        <div className="flex justify-between items-center"><h2 className="font-semibold">Solve history ({timer.history.length})</h2><button onClick={exportRecords} disabled={!timer.history.length} className="text-xs text-indigo-300 disabled:opacity-40">Export JSON</button></div>
-        <div className="space-y-2">{timer.history.slice(-20).reverse().map(r=><button key={r.id} disabled={active} onClick={()=>{setReplay(r);setStep(r.solution.length);}} className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-lg p-3 disabled:opacity-40"><span className="font-mono">{r.termination==='dnf'?'DNF':`${(r.durationMs/1000).toFixed(2)}s`}</span><span className="text-xs text-zinc-500 ml-3">{new Date(r.createdAt).toLocaleString()} · {r.source} · {r.solution.length} events</span><p className="font-mono text-xs text-zinc-400 mt-1 truncate">{r.scramble}</p></button>)}</div>
+        <div className="flex justify-between items-center"><h2 className="font-semibold">{timer.activeGroup.name} history ({timer.groupHistory.length})</h2><button onClick={exportRecords} disabled={!timer.history.length} className="text-xs text-indigo-300 disabled:opacity-40">Export JSON</button></div>
+        <p className="text-[11px] text-zinc-500">Export includes all groups and solves. Older ungrouped solves appear in Regular 3×3.</p>
+        {!timer.groupHistory.length && <p className="text-sm text-zinc-400">No solves in this group yet.</p>}
+        <div className="space-y-2">{timer.groupHistory.slice(-20).reverse().map(r=><button key={r.id} disabled={active} onClick={()=>{setReplay(r);setStep(r.solution.length);}} className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-lg p-3 disabled:opacity-40"><span className="font-mono">{r.termination==='dnf'?'DNF':`${(r.durationMs/1000).toFixed(2)}s`}</span><span className="text-xs text-zinc-500 ml-3">{new Date(r.createdAt).toLocaleString()} · {r.source} · {r.solution.length} events</span><p className="font-mono text-xs text-zinc-400 mt-1 truncate">{r.scramble}</p></button>)}</div>
       </div>
     </div>
   </section>;

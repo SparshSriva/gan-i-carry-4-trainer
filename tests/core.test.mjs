@@ -158,6 +158,30 @@ test('drag snapping picks a valid up/front frame',()=>{
 });
 const sessionModule=await sourceModule('utils/solveSession.ts',{'./ScrambleAssistant':(await sourceModule('utils/ScrambleAssistant.ts',{'./moveUtils':moves.url})).url});
 const sessionModel=sessionModule.exports;
+const groupsModel=(await sourceModule('utils/solveGroups.ts')).exports;
+test('solve groups isolate histories and migrate old records without changing them',()=>{
+  const records=[{durationMs:1000},{groupId:'oh',durationMs:2000},{groupId:'roux',durationMs:3000}];
+  assert.deepEqual(groupsModel.groupSolves(records,'regular-3x3'),[records[0]]);
+  assert.deepEqual(groupsModel.groupSolves(records,'oh'),[records[1]]);
+  assert.equal(records[0].groupId,undefined);
+  const original=globalThis.localStorage;let stored=null;
+  globalThis.localStorage={getItem:()=>stored,setItem:(_key,value)=>{stored=value;}};
+  try {
+    groupsModel.saveSolveGroups([...groupsModel.DEFAULT_SOLVE_GROUPS,{id:'custom',name:'Roux blocks'}],'custom');
+    const loaded=groupsModel.loadSolveGroups();assert.equal(loaded.activeId,'custom');assert.equal(loaded.groups.length,4);
+  }finally{if(original===undefined)delete globalThis.localStorage;else globalThis.localStorage=original;}
+});
+test('a completed solve retains its group snapshot and group averages are isolated',()=>{
+  const s=new sessionModel.SolveSession(puzzle,'R',gripModel.DEFAULT_GRIP,'manual',{kind:'custom'},{id:'oh',name:'OH practice'});
+  s.useManualSetup(1000);s.start(2000);const result=s.finish(5000);
+  assert.equal(result.groupId,'oh');assert.equal(result.groupName,'OH practice');
+  assert.equal(sessionModel.solveSummary(groupsModel.groupSolves([result,{...result,groupId:'roux',durationMs:100}], 'oh')).meanMs,3000);
+});
+test('GAN stream guard rejects gaps and untimed recovery, ignores duplicates and handles serial wrap',async()=>{
+  const {GanMoveGuard}=(await sourceModule('utils/ganMoveGuard.ts')).exports;
+  const guard=new GanMoveGuard();assert.equal(guard.accept(255,1000),'ok');assert.equal(guard.accept(255,1001),'duplicate');assert.equal(guard.accept(0,1002),'ok');assert.equal(guard.accept(2,1003),'gap');
+  guard.reset();assert.equal(guard.accept(30,null),'untimed');guard.reset();assert.equal(guard.accept(99,2000),'ok');
+});
 test('general timer preserves scramble, frame, raw and logical solution events and timing',()=>{
   const s=new sessionModel.SolveSession(puzzle,"R U",{up:'U',front:'R'},'gan');
   s.feed('R',1000,'B');s.feed('U',1100,'U');assert.equal(s.phase,'ready');

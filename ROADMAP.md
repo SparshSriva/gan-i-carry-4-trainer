@@ -12,7 +12,7 @@ Updated October 14, 2026. Current implementation and milestone status are record
 - Replace Library and Analytics placeholders with searchable cases and local practice history.
 - Respect weighted practice filters, hide case identity during blind recognition, and calculate XP deterministically.
 - Keep Bluetooth callbacks current and cache MAC addresses per device.
-- Verify production build, lint, 29 regression tests, and the documented browser acceptance flows.
+- Verify production build, lint, 32 regression tests, and the documented browser acceptance flows.
 
 ## Next: physical cube reliability
 
@@ -47,4 +47,6 @@ Static up/front frame remapping is implemented and tested for all 24 orientation
 
 The general Solve Timer now saves scramble/solution reconstructions, supports local replay/JSON export, and displays best/mean/ao5/ao12. Snapped starting grip drives GAN face mapping. Public comparison and next priorities are recorded in [TRAINER_COMPARISON.md](./docs/TRAINER_COMPARISON.md).
 
-Official TNoodle-WCA random-state generation is implemented through the local signed runtime. Next timer work: +2/DNF editing with an audit trail, optional inspection rules, session grouping, solution annotations, import validation, and CFOP/fluency splits computed from saved move/state sequences. Future AI assistance should operate on a versioned reconstruction with clear input provenance and request user consent before transmitting records to an external service.
+Official TNoodle-WCA random-state generation is implemented through the local signed runtime. Next timer work: +2/DNF editing with an audit trail, optional inspection rules, solution annotations, import validation, and CFOP/fluency splits computed from saved move/state sequences. Future AI assistance should operate on a versioned reconstruction with clear input provenance and request user consent before transmitting records to an external service.
+
+Named timer groups and group-specific averages are implemented. Circular packet serial checks, duplicate suppression, untimed recovery detection, view/source input isolation, and visible hardware diagnostics are implemented. Real-device acceptance and initial state hydration remain outstanding; see docs/HARDWARE_TEST.md.

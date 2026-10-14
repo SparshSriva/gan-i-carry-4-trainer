@@ -27,6 +27,9 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [cubeName, setCubeName] = useState<string | null>(null);
+  const [hardwareIssue,setHardwareIssue]=useState('');
+  const [hardwareState,setHardwareState]=useState('Waiting for cube state');
+  const [lastHardwareMove,setLastHardwareMove]=useState('No turns received');
   const [keybindsOpen, setKeybindsOpen] = useState(false);
 
   // MAC Address Modal state for browser BLE sandboxing fallback
@@ -45,6 +48,7 @@ export default function App() {
   const viewRef=useRef(view);viewRef.current=view;
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
+  const simulatorRef=useRef(state.simulatorMode);simulatorRef.current=state.simulatorMode;
 
   const handleConnect = async () => {
     // If already connected, toggle disconnect
@@ -66,10 +70,18 @@ export default function App() {
     }
 
     setConnectionStatus('connecting');
+    setHardwareIssue('');setHardwareState('Waiting for cube state');setLastHardwareMove('No turns received');
 
     try {
       const conn = await ganBluetooth.connect({
-        onMove: (move, timestamp) => {const logical=physicalToGrip(move,gripRef.current);if(viewRef.current==='timer')timerRef.current.feed(logical,timestamp,move);else actionsRef.current.feedMove(logical,timestamp);},
+        onMove: (move, timestamp,serial) => {
+          const logical=physicalToGrip(move,gripRef.current);setLastHardwareMove(`GAN ${move} → ${logical} · packet ${serial}`);
+          if(simulatorRef.current)return;
+          if(viewRef.current==='timer')timerRef.current.feed(logical,timestamp,move);
+          else if(viewRef.current==='trainer')actionsRef.current.feedMove(logical,timestamp);
+        },
+        onFacelets: facelets=>setHardwareState(facelets==='UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB'?'Cube reports solved':'Cube reports an unsolved state — solve physically before starting'),
+        onIntegrityIssue: message=>{setHardwareIssue(message);timerRef.current.interrupt();actionsRef.current.syncSolvedState();},
         onBattery: (level) => setBatteryLevel(level),
         onHardware: (info) => {
           if (info.hardwareName) {
@@ -111,11 +123,13 @@ export default function App() {
   };
 
   const handleSyncSolved = async () => {
+    timer.interrupt();actions.syncSolvedState();
+    try {
     if (ganBluetooth.isConnected()) {
       await ganBluetooth.resetCube();
     }
-    actions.syncSolvedState();
-    timer.interrupt();
+    setHardwareIssue('');setHardwareState('Solved origin reset — physical cube must be solved');setLastHardwareMove('No turns received since reset');
+    }catch(err){setHardwareIssue(`Cube reset failed: ${err instanceof Error?err.message:'Bluetooth command failed'}. Reconnect before continuing.`);}
   };
 
   const handleMacSubmit = (mac: string) => {
@@ -144,6 +158,8 @@ export default function App() {
     actions.nextCase();
   };
 
+  const hardwareBlocked=connectionStatus==='connected' && Boolean(hardwareIssue);
+
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden">
       <NavBar
@@ -162,9 +178,14 @@ export default function App() {
         onOpenKeybinds={() => setKeybindsOpen(true)}
       />
 
+      {connectionStatus==='connected' && <div role="status" className={`px-4 py-2 text-xs border-b ${hardwareIssue?'bg-amber-950/50 border-amber-800 text-amber-200':'bg-zinc-900 border-zinc-800 text-zinc-400'}`}>
+        {hardwareIssue || `${hardwareState} · ${lastHardwareMove}. Start solved, choose your grip, then Sync Solved. Keep that physical grip during the attempt.`}
+      </div>}
+
       <main className="flex-1 overflow-hidden">
+        {hardwareBlocked && <p className="p-6 text-amber-200">Hardware tracking paused. Solve the physical cube, then select Sync Solved. If reset fails, disconnect and reconnect.</p>}
         {view === 'trainer' && !state.puzzleReady && <p role="status" className="p-6 text-zinc-400">Loading cube engine…</p>}
-        {view === 'trainer' && state.puzzleReady && (
+        {view === 'trainer' && state.puzzleReady && !hardwareBlocked && (
           <TrainerView
             catalogProps={catalogProps}
             phase={state.phase}
@@ -188,8 +209,8 @@ export default function App() {
           />
         )}
 
-        {view==='timer' && <SolveTimerView timer={timer} grip={grip} onGripChange={setGrip} simulator={state.simulatorMode} connected={connectionStatus==='connected'} />}
-        {view === 'library' && (
+        {view==='timer' && !hardwareBlocked && <SolveTimerView timer={timer} grip={grip} onGripChange={setGrip} simulator={state.simulatorMode} connected={connectionStatus==='connected'} />}
+        {view === 'library' && !hardwareBlocked && (
           <LibraryView {...catalogProps}/>
         )}
         {view === 'analytics' && <AnalyticsView cases={state.cases} />}

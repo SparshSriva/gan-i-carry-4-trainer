@@ -45,7 +45,7 @@ Open **Solve Timer** to practice a full 3×3 solve, independent of algorithm cas
 
 Manual mode confirms a physical scramble and uses Space or the Start/Stop buttons. It saves time and scramble, explicitly records that completion was unverified, and does not fabricate a solution. Move reconstruction requires simulator or GAN input.
 
-History retains the latest 1,000 solves in this browser. Best, mean, ao5, and ao12 are shown; mean excludes DNF, and rolling averages trim extremes. There are no +2 penalties or enforced inspection limits yet. Changing tabs, input mode, disconnecting, or syncing during a running solve saves it as DNF. Generated scrambles come from the signed TNoodle-WCA 1.2.3 official program. Pasted or edited scrambles are marked custom. Generation failures offer retry and never silently substitute a random-move sequence. For WCA-standard application choose white up / green front; other selected grips apply the sequence relative to that grip for practice. These are local practice scrambles, not delegated competition scramble sets.
+Choose a solve group: Regular 3×3, One-handed (OH), Roux, or a named custom group. Groups can be created and renamed; each has separate history and best/mean/ao5/ao12. The group locks during setup and solving. Existing ungrouped records appear in Regular 3×3 without rewriting them. Export includes every group and solve. OH and Roux use the same 3×3 generator and are organizational categories. History retains the latest 1,000 solves across all groups in this browser. Best, mean, ao5, and ao12 are shown; mean excludes DNF, and rolling averages trim extremes. There are no +2 penalties or enforced inspection limits yet. Changing tabs, input mode, disconnecting, or syncing during a running solve saves it as DNF. Generated scrambles come from the signed TNoodle-WCA 1.2.3 official program. Pasted or edited scrambles are marked custom. Generation failures offer retry and never silently substitute a random-move sequence. For WCA-standard application choose white up / green front; other selected grips apply the sequence relative to that grip for practice. These are local practice scrambles, not delegated competition scramble sets.
 
 See [solve record format and analysis plans](./docs/SOLVE_RECORDS.md). No AI service receives your data automatically.
 
@@ -64,3 +64,5 @@ npm test
 npm run lint
 npm run build
 ```
+
+Before your first physical test, follow [HARDWARE_TEST.md](./docs/HARDWARE_TEST.md). The connection status shows raw/logical turns and packet serials. Stream gaps or untimed recovered moves pause training; start from a physically solved cube and Sync Solved to recover.

@@ -1,12 +1,13 @@
 # Solve records and future analysis
 
-General solves are separate from algorithm attempt statistics. Records live in localStorage under `ganicv4_solves_v1`, with the latest 1,000 retained. Export JSON for backups or future analysis. Exported JSON contains a `schemaVersion`, `exportedAt` ISO timestamp, and `solves` array.
+General solves are separate from algorithm attempt statistics. Records live in localStorage under `ganicv4_solves_v1`, with the latest 1,000 retained. Export JSON for backups or future analysis. Exported JSON contains a `schemaVersion`, `exportedAt` ISO timestamp, and `solves` array, plus group metadata and the active group ID.
 
 ## Record schema (version 1)
 
 | Field | Meaning |
 | --- | --- |
 | `id`, `schemaVersion`, `puzzle` | UUID, schema version, and `3x3x3` |
+| `groupId`, `groupName` | Optional stable group ID and name snapshot; old records belong to Regular 3×3 |
 | `createdAt` | Epoch milliseconds when the scramble session was created |
 | `source` | `gan`, `simulator`, or `manual` |
 | `scramble` | Validated outer-face target scramble in the selected solving frame |
@@ -30,4 +31,4 @@ Replay starts from a solved cube in the saved grip, applies the target scramble,
 
 Records do not contain camera images or video, and no AI service is connected. Future integrations should validate records, account for missing/out-of-order events, distinguish verified tracked solves from manual times, and ask before sending records outside the browser. Cube-pose tracking must remain separate from sticker permutation and solution timing.
 
-Rolling ao5/ao12 trim the fastest and slowest result (5% rounded up); a DNF remaining after trimming makes the average DNF. Best and mean use non-DNF records. +2 penalties and session-specific statistics are not implemented yet.
+Rolling ao5/ao12 trim the fastest and slowest result (5% rounded up); a DNF remaining after trimming makes the average DNF. Best and mean use non-DNF records. +2 penalties remain unimplemented; group-specific statistics are implemented. Group metadata persists under `ganicv4_solve_groups_v1`; renamed groups retain stable IDs and historical name snapshots. The 1,000-record limit is shared by all groups.

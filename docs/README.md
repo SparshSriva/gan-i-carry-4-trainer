@@ -22,3 +22,9 @@ See [catalog provenance](./ALGORITHM_CATALOG.md) and [official scramble setup](.
 
 ![Simplified F2L reference diagrams](./f2l-cards-preview.png)
 
+
+## Solve groups and hardware acceptance
+
+![Named solve groups](./solve-groups-preview.png)
+
+See [first hardware test](./HARDWARE_TEST.md).

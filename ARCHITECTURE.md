@@ -29,7 +29,7 @@ The sourced catalog replaces the starter entries with 41 basic F2L, 57 OLL, and 
 
 ## Verification
 
-- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (29 tests).
+- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (32 tests).
 - `npm run build`: TypeScript and production Vite bundle.
 - `npm run lint`: ESLint, including the active Voxygen component.
 - Browser acceptance: Sune setup, repeated wrong execution turns staying in EXECUTING, recovery followed by solved completion, library search, populated analytics, repeated rail turns, single-event rail controls, mouse dragging, roll adjustment, keyboard view alignment without new puzzle moves, and alignment persistence across view changes.
@@ -67,3 +67,13 @@ Browser acceptance also verified snap-on-release to white-up/red-front, frame lo
 ## Catalog and session acceptance
 
 Browser checks verified alternate preference and session persistence after reload, selecting a specific variant, guided inverse setup, solved execution, and variant-specific review statistics. The live timer successfully obtained a random-state scramble from the signed local official program. Original SVG previews derive from local cube geometry; no reference site artwork or implementation code is shipped.
+
+## Pre-hardware architecture review (October 14, 2026)
+
+The timer state machine remains independent of trainer attempts. `solveGroups.ts` owns metadata and backward-compatible filtering; group ID/name are snapshotted when a session begins. Group selection and creation are blocked during active setup/solving, and `begin` refuses to overwrite an active attempt. Per-group statistics use only that group's solves; all-group export retains metadata. No new timing engine is introduced for OH or Roux.
+
+Input routing now accepts GAN turns only on the active timer/trainer view and only in hardware mode. Current callback refs retain live grip and session state. `GanMoveGuard` validates the public library's circular 0–255 serial contract, ignores duplicates, and detects gaps/out-of-order packets and missing host timestamps. Integrity failures interrupt an active timer as DNF, abandon trainer metrics, and block further hardware practice until reset. Reset errors remain visible instead of falsely marking recovery successful. Stream errors/completion release stale connections; connection setup cannot report success after disconnect.
+
+The status banner exposes reported solved/unsolved snapshots, the last raw-to-logical move, and serial number. FACELETS is diagnostic only: arbitrary snapshot hydration is still absent. A known physically solved origin, static calibrated grip, and outer-face-only input are required for the first acceptance test. Automatic regrips, hardware slice/wide interpretation, camera pose tracking, and clock regression using cube timestamps remain future work. Host timing is the current timing source. Existing frame tests cover all 24 orientations; simulated stream tests do not establish actual device compatibility.
+
+Validation: 32 regression tests, lint, TypeScript/production build; browser checks verified group isolation, active group locking, custom group creation and persistence, and a reconstructed simulator solve in OH. Physical discovery, MAC negotiation, real packet timing/order, battery, reset, disconnect/reconnect, and face-label conventions still require the user's cube test. See [hardware acceptance procedure](./docs/HARDWARE_TEST.md).

@@ -5,6 +5,7 @@ import type { GripOrientation } from './gripOrientation';
 export type SolvePhase = 'scrambling' | 'ready' | 'solving' | 'review';
 export interface SolveMove { move: string; rawMove?: string; timestamp: number; elapsedMs: number }
 export interface SolveRecord {
+  groupId?:string; groupName?:string;
   scrambleProvenance?:ScrambleProvenance;
   schemaVersion: 1; id: string; puzzle: '3x3x3'; createdAt: number;
   source: 'simulator' | 'gan' | 'manual'; scramble: string;
@@ -23,7 +24,7 @@ export class SolveSession {
   setupMoves: SolveMove[]=[]; solution: SolveMove[]=[]; readyAt=0; startedAt: number | null=null; result: SolveRecord | null=null;
   setupMethod: SolveRecord['setupMethod']='guided';
   readonly createdAt=Date.now();
-  constructor(readonly puzzle: KPuzzle, readonly scramble: string, readonly grip: GripOrientation, readonly source: SolveRecord['source'],readonly provenance:ScrambleProvenance={kind:'custom'}) {
+  constructor(readonly puzzle: KPuzzle, readonly scramble: string, readonly grip: GripOrientation, readonly source: SolveRecord['source'],readonly provenance:ScrambleProvenance={kind:'custom'},readonly group:{id:string;name:string}={id:'regular-3x3',name:'Regular 3×3'}) {
     this.scramble=validateScramble(scramble);this.pattern=puzzle.defaultPattern();this.assistant=new ScrambleAssistant(this.scramble,()=>{});
   }
   useManualSetup(now=Date.now()): void { this.setupMethod=this.source==='manual'?'manual-confirmed':'virtual-applied';this.pattern=this.puzzle.defaultPattern().applyAlg(this.scramble);this.phase='ready';this.readyAt=now; }
@@ -44,7 +45,7 @@ export class SolveSession {
   finish(now=Date.now(), termination: SolveRecord['termination']='manual'): SolveRecord | null {
     if(this.phase!=='solving' || this.startedAt===null || this.result)return null;
     this.phase='review';
-    this.result={schemaVersion:1,id:crypto.randomUUID(),puzzle:'3x3x3',createdAt:this.createdAt,source:this.source,scramble:this.scramble,scrambleProvenance:this.provenance,setupMethod:this.setupMethod,startingGrip:{...this.grip},setupMoves:[...this.setupMoves],solution:[...this.solution],durationMs:Math.max(0,now-this.startedAt),inspectionMs:Math.max(0,this.startedAt-this.readyAt),solved:termination==='solved',termination};
+    this.result={schemaVersion:1,id:crypto.randomUUID(),puzzle:'3x3x3',groupId:this.group.id,groupName:this.group.name,createdAt:this.createdAt,source:this.source,scramble:this.scramble,scrambleProvenance:this.provenance,setupMethod:this.setupMethod,startingGrip:{...this.grip},setupMoves:[...this.setupMoves],solution:[...this.solution],durationMs:Math.max(0,now-this.startedAt),inspectionMs:Math.max(0,this.startedAt-this.readyAt),solved:termination==='solved',termination};
     return this.result;
   }
 }
