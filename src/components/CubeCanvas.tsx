@@ -1,33 +1,16 @@
 /**
  * CubeCanvas.tsx — Multi-representation visualizer featuring:
- * - 3D Interactive WebGL Cube (cubing/twisty)
+ * - 3D Interactive WebGL Cube (via Twisty3DView)
  * - NavaCakraYantra (2D Nine-Circles Permutation Graph with 54 sticker nodes)
  * - PermGraph (2D Last-Layer Cycle Diagram with arrows)
  * - Split View (3D Cube alongside the 2D Permutation Graph)
  */
 
-import { useEffect, useRef } from 'react';
+import React from 'react';
 import NavaCakraYantra from './NavaCakraYantra';
 import PermGraph from './PermGraph';
+import Twisty3DView from './Twisty3DView';
 import { SOLVED_FACELETS } from '../data/navaCakraGeometry';
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'twisty-player': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        puzzle?: string;
-        alg?: string;
-        'experimental-setup-alg'?: string;
-        'hint-facelets'?: string;
-        'back-view'?: string;
-        visualization?: string;
-        'control-panel'?: string;
-        background?: string;
-        'tempo-scale'?: string;
-      };
-    }
-  }
-}
 
 export type ViewMode = 'split' | '3d' | 'circles' | 'top' | 'layer';
 
@@ -41,7 +24,7 @@ interface CubeCanvasProps {
   onLayerClick?: (layer: string) => void;
 }
 
-export default function CubeCanvas({
+export const CubeCanvas: React.FC<CubeCanvasProps> = ({
   setupAlg = '',
   alg = '',
   view = 'split',
@@ -49,40 +32,22 @@ export default function CubeCanvas({
   facelets = SOLVED_FACELETS,
   lastMove = null,
   onLayerClick,
-}: CubeCanvasProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    import('cubing/twisty').catch(() => {
-      console.warn('cubing/twisty failed to load — fallback to 2D graph');
-    });
-  }, []);
-
-  // 1. Dual Split View (3D Cube + 2D Nine-Circles Permutation Graph alongside)
+}) => {
+  // 1. Dual Split View (3D Cube + 2D Nine-Circles Permutation Graph side-by-side)
   if (view === 'split') {
     return (
       <div className="relative w-full aspect-square bg-zinc-900/90 rounded-2xl overflow-hidden grid grid-cols-2 gap-2 p-2 border border-zinc-800 shadow-xl">
         {/* Left: 3D Cube */}
         <div className="relative w-full h-full flex flex-col items-center justify-center bg-zinc-950/80 rounded-xl overflow-hidden border border-zinc-800/60">
-          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-700/60 text-[10px] font-mono text-zinc-400">
+          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-700/60 text-[10px] font-mono text-zinc-400 pointer-events-none">
             3D Puzzle
           </div>
-          <twisty-player
-            puzzle="3x3x3"
-            alg={alg}
-            experimental-setup-alg={setupAlg}
-            hint-facelets="none"
-            back-view="none"
-            visualization="PG3D"
-            control-panel="none"
-            background="none"
-            style={{ width: '100%', height: '100%' }}
-          />
+          <Twisty3DView setupAlg={setupAlg} alg={alg} visualization="PG3D" />
         </div>
 
         {/* Right: 2D Nine-Circles Permutation Graph */}
         <div className="relative w-full h-full flex flex-col items-center justify-center bg-zinc-950/80 rounded-xl p-1 overflow-hidden border border-zinc-800/60">
-          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-700/60 text-[10px] font-mono text-zinc-400">
+          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-700/60 text-[10px] font-mono text-zinc-400 pointer-events-none">
             2D Permutation Graph
           </div>
           <NavaCakraYantra
@@ -121,23 +86,16 @@ export default function CubeCanvas({
     );
   }
 
-  // 4. Standard 3D or 2D Top-Down
+  // 4. Standard 3D View or 2D Top-Down View
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full aspect-square bg-zinc-900/90 rounded-2xl overflow-hidden flex items-center justify-center border border-zinc-800 shadow-xl"
-    >
-      <twisty-player
-        puzzle="3x3x3"
+    <div className="relative w-full aspect-square bg-zinc-900/90 rounded-2xl overflow-hidden flex items-center justify-center border border-zinc-800 shadow-xl">
+      <Twisty3DView
+        setupAlg={setupAlg}
         alg={alg}
-        experimental-setup-alg={setupAlg}
-        hint-facelets="none"
-        back-view="none"
         visualization={view === 'top' ? 'experimental-2D-LL' : 'PG3D'}
-        control-panel="none"
-        background="none"
-        style={{ width: '100%', height: '100%' }}
       />
     </div>
   );
-}
+};
+
+export default CubeCanvas;
