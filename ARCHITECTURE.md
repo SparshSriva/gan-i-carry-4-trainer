@@ -18,7 +18,9 @@ The puzzle state is mathematically modeled as an element of the permutation grou
 gan-i-carry-4-trainer/
 ├── src/
 │   ├── components/
-│   │   ├── CubeCanvas.tsx              # Multi-mode visualizer (Dual View, 3D, 9-Circles, 2D LL)
+│   │   ├── CubeCanvas.tsx              # Multi-mode visualizer (Dual View, Voxygen 2D, 9-Circles, 3D)
+│   │   ├── VoxygenRubik2D.tsx          # Stereographic 2D Rubik's cube with 9 closed looping rails
+│   │   ├── Twisty3DView.tsx            # Imperative WebGL 3D cube wrapper avoiding React custom-element errors
 │   │   ├── NavaCakraYantra.tsx         # The 9-Circles 54-node Permutation Graph SVG engine
 │   │   ├── PermGraph.tsx               # Top-down Last Layer cycle diagram with bezier arrows
 │   │   ├── NavBar.tsx                  # Header with XP/Level progression, streak flame, audio toggle

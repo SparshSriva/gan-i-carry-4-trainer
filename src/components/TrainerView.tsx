@@ -84,7 +84,8 @@ export default function TrainerView({
   const setupAlg = activeCase ? invertAlg(activeCase.alg) : '';
 
   const viewModes: { id: ViewMode; label: string; icon: typeof Box }[] = [
-    { id: 'split', label: 'Dual View (3D + 2D Graph)', icon: Columns },
+    { id: 'split', label: 'Dual View (3D + 2D)', icon: Columns },
+    { id: 'voxygen', label: '2D Rails (Voxygen)', icon: GitGraph },
     { id: 'circles', label: '9-Circles Graph', icon: GitGraph },
     { id: '3d', label: '3D Cube', icon: Box },
     { id: 'layer', label: 'LL Cycles', icon: CircleDot },
