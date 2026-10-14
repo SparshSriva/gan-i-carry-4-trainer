@@ -5,13 +5,15 @@
  * and Voxygen 2D stereographic permutation engine.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { AppView, ConnectionStatus } from './types';
 import { useTrainerState } from './hooks/useTrainerState';
 import NavBar from './components/NavBar';
 import TrainerView from './components/TrainerView';
 import { KeybindReferenceModal } from './components/KeybindReferenceModal';
 import { MacAddressModal } from './components/MacAddressModal';
+import AnalyticsView from './components/AnalyticsView';
+import LibraryView from './components/LibraryView';
 import { ganBluetooth } from './utils/ganBluetooth';
 
 export default function App() {
@@ -31,7 +33,9 @@ export default function App() {
     deviceName: 'GAN Smart Cube',
   });
 
-  const [state, actions] = useTrainerState();
+  const [state, actions] = useTrainerState(view === 'trainer' && !keybindsOpen && !macModal.isOpen);
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
 
   const handleConnect = async () => {
     // If already connected, toggle disconnect
@@ -54,7 +58,7 @@ export default function App() {
 
     try {
       const conn = await ganBluetooth.connect({
-        onMove: (move) => actions.feedMove(move),
+        onMove: (move, timestamp) => actionsRef.current.feedMove(move, timestamp),
         onBattery: (level) => setBatteryLevel(level),
         onHardware: (info) => {
           if (info.hardwareName) {
@@ -62,6 +66,7 @@ export default function App() {
           }
         },
         onDisconnect: () => {
+          actionsRef.current.syncSolvedState();
           setConnectionStatus('disconnected');
           setBatteryLevel(null);
           setCubeName(null);
@@ -77,6 +82,7 @@ export default function App() {
         },
       });
 
+      actionsRef.current.setSimulatorMode(false);
       setConnectionStatus('connected');
       setCubeName(conn.deviceName || 'GAN i Carry 4');
     } catch (err: unknown) {
@@ -134,7 +140,8 @@ export default function App() {
       />
 
       <main className="flex-1 overflow-hidden">
-        {view === 'trainer' && (
+        {view === 'trainer' && !state.puzzleReady && <p role="status" className="p-6 text-zinc-400">Loading cube engine…</p>}
+        {view === 'trainer' && state.puzzleReady && (
           <TrainerView
             phase={state.phase}
             activeCase={state.activeCase}
@@ -144,7 +151,7 @@ export default function App() {
             lastXpEvent={state.lastXpEvent}
             streak={state.streak}
             simulatorMode={state.simulatorMode}
-            lastMove={state.lastMove}
+            moveHistory={state.moveHistory}
             onSelectCase={actions.selectCase}
             onNextCase={actions.nextCase}
             onNextFromReview={handleNextFromReview}
@@ -155,22 +162,10 @@ export default function App() {
         )}
 
         {view === 'library' && (
-          <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
-            <h3 className="text-lg font-semibold text-white">Algorithm Library</h3>
-            <p className="text-sm max-w-md text-center text-zinc-500">
-              Browse all 21 PLL cases and 2-Look OLL cases directly in the Trainer view using the filter buttons (PLL / OLL / F2L). Full custom algorithm editing lands in Milestone 3.
-            </p>
-          </div>
+          <LibraryView cases={state.cases} onStatusChange={actions.updateCaseStatus}
+            onTrain={c => { actions.selectCase(c); setView('trainer'); }} />
         )}
-
-        {view === 'analytics' && (
-          <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
-            <h3 className="text-lg font-semibold text-white">Execution Analytics & Telemetry</h3>
-            <p className="text-sm max-w-md text-center text-zinc-500">
-              Granular time deltas and TPS breakdowns are displayed live below the cube in the Trainer view. Aggregate historical distribution charts land in Milestone 4.
-            </p>
-          </div>
-        )}
+        {view === 'analytics' && <AnalyticsView cases={state.cases} />}
       </main>
 
       {/* HyperSpeedCube Keybind Reference Modal */}

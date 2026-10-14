@@ -3,7 +3,7 @@
  *
  * Responsibilities:
  *  - Tracks position within a scramble sequence.
- *  - Handles R+R → R2 double-turn merging with a 250 ms window.
+ *  - Handles R+R → R2 double-turn merging without losing partial-turn state.
  *  - Detects wrong moves, builds a correction queue, and resumes on fix.
  *  - Emits events upstream via the `onChange` callback.
  */
@@ -23,13 +23,12 @@ export interface ScrambleAssistantSnapshot {
   correctionQueue: string[];
 }
 
-const DOUBLE_TURN_WINDOW_MS = 250;
 
 export class ScrambleAssistant {
   private tokens: ScrambleToken[];
   private cursor: number = 0;
   private correctionQueue: string[] = [];
-  private pendingHalfMove: { move: string; ts: number } | null = null;
+  private pendingHalfMove: { move: string } | null = null;
   private onChange: (snap: ScrambleAssistantSnapshot) => void;
 
   constructor(scrambleAlg: string, onChange: (snap: ScrambleAssistantSnapshot) => void) {
@@ -40,15 +39,17 @@ export class ScrambleAssistant {
 
   /** Feed a physical move from the hardware or keyboard simulator. */
   feedMove(physicalMove: string): void {
-    const now = Date.now();
 
     // ── Correction queue takes priority ───────────────────────────────────────
     if (this.correctionQueue.length > 0) {
       const expected = this.correctionQueue[0];
-      if (physicalMove === expected) {
+      if (expected.endsWith('2') && physicalMove[0] === expected[0] && !physicalMove.endsWith('2')) {
+        this.correctionQueue[0] = physicalMove;
+        this.emit();
+      } else if (physicalMove === expected) {
         this.correctionQueue.shift();
         if (this.correctionQueue.length === 0) {
-          this.setTokenActive(this.cursor);
+          if (!this.pendingHalfMove) this.setTokenActive(this.cursor);
         }
         this.emit();
       } else {
@@ -64,40 +65,39 @@ export class ScrambleAssistant {
 
     const target = this.tokens[this.cursor].move;
 
-    // ── Double-turn handling ──────────────────────────────────────────────────
-    if (target.endsWith('2')) {
-      const singleFace = target[0];
-      if (this.pendingHalfMove?.move[0] === singleFace) {
-        // Second physical turn for a double — check it matches within window
-        if (now - this.pendingHalfMove.ts <= DOUBLE_TURN_WINDOW_MS) {
-          const merged = mergeMoves(this.pendingHalfMove.move, physicalMove);
-          if (merged === target) {
-            this.pendingHalfMove = null;
-            this.markDone();
-            return;
-          }
+    // A half turn is state, not a timing gesture: slow turns still count.
+    if (physicalMove === target && !this.pendingHalfMove) {
+      this.markDone();
+      return;
+    }
+    if (target.endsWith('2') && physicalMove[0] === target[0]) {
+      if (this.pendingHalfMove) {
+        const merged = mergeMoves(this.pendingHalfMove.move, physicalMove);
+        if (merged === target) {
+          this.pendingHalfMove = null;
+          this.markDone();
+          return;
         }
-        // Timeout or mismatch — treat old half as a wrong move
-        this.pendingHalfMove = null;
-      }
-
-      if (physicalMove[0] === singleFace) {
-        // First physical turn toward a double-turn target
-        this.pendingHalfMove = { move: physicalMove, ts: now };
-        this.tokens[this.cursor] = { ...this.tokens[this.cursor], state: 'half' };
+        if (merged === null) {
+          this.pendingHalfMove = null;
+          this.setTokenActive(this.cursor);
+          this.emit();
+          return;
+        }
+      } else if (!physicalMove.endsWith('2')) {
+        this.pendingHalfMove = { move: physicalMove };
+        this.tokens[this.cursor].state = 'half';
         this.emit();
         return;
       }
     }
 
-    this.pendingHalfMove = null;
-
     // ── Normal move check ─────────────────────────────────────────────────────
-    if (physicalMove === target) {
+    if (physicalMove === target && !this.pendingHalfMove) {
       this.markDone();
     } else {
       // Wrong move — enter error recovery
-      this.tokens[this.cursor] = { ...this.tokens[this.cursor], state: 'active' };
+      if (!this.pendingHalfMove) this.setTokenActive(this.cursor);
       this.correctionQueue.push(invertMove(physicalMove));
       this.emit();
     }

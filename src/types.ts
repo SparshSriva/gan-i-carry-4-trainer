@@ -64,6 +64,8 @@ export interface AttemptResult {
   recognitionMs: number;
   executionMs: number;
   tps: number;
+  moves?: string[];
+  hadMistake?: boolean;
   moveDeltas: number[]; // ms between consecutive moves
   timestamp: number;
 }

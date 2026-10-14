@@ -14,19 +14,20 @@ const STATUS_DOT: Record<AlgCase['status'], string> = {
 interface CaseSelectorProps {
   cases: AlgCase[];
   onSelect: (c: AlgCase) => void;
-  onNext: () => void;
+  onNext: (pool?: AlgCase[]) => void;
 }
 
 export default function CaseSelector({ cases, onSelect, onNext }: CaseSelectorProps) {
   const [filter, setFilter] = useState<AlgSubset | 'ALL'>('ALL');
 
-  const visible = filter === 'ALL' ? cases : cases.filter(c => c.subset === filter);
+  const [status, setStatus] = useState('ALL');
+  const visible = cases.filter(c => (filter === 'ALL' || c.subset === filter) && (status === 'ALL' || c.status === status));
 
   return (
     <div className="flex flex-col h-full gap-3">
       {/* Controls */}
-      <div className="flex items-center gap-2">
-        {(['ALL', 'PLL', 'OLL', 'F2L'] as const).map(f => (
+      <div className="flex flex-wrap items-center gap-2">
+        {(['ALL', 'PLL', 'OLL'] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -39,15 +40,18 @@ export default function CaseSelector({ cases, onSelect, onNext }: CaseSelectorPr
             {f}
           </button>
         ))}
+        <select aria-label="Practice learning status" value={status} onChange={e => setStatus(e.target.value)} className="bg-zinc-800 rounded p-1 text-xs"><option value="ALL">All statuses</option><option value="unlearned">Unlearned</option><option value="learning">Learning</option><option value="learned">Learned</option></select>
         <div className="flex-1" />
         <button
-          onClick={onNext}
+          disabled={!visible.length}
+          onClick={() => onNext(visible)}
           className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium"
         >
           Random Next →
         </button>
       </div>
 
+      {!visible.length && <p className="text-sm text-zinc-400">No cases with this status. Change the filter or set a learning status in the library.</p>}
       {/* Case grid */}
       <div className="flex-1 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 content-start">
         {visible.map(c => (

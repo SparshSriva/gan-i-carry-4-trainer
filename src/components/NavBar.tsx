@@ -1,7 +1,7 @@
 import React from 'react';
 import { Wifi, WifiOff, Battery, RefreshCw, Keyboard, Volume2, VolumeX, Flame, Zap, Trophy } from 'lucide-react';
 import { AppView, ConnectionStatus } from '../types';
-import { XpState, levelName } from '../hooks/useXpSystem';
+import { XpState, levelName, xpForLevel } from '../hooks/useXpSystem';
 
 interface NavBarProps {
   view: AppView;
@@ -41,7 +41,7 @@ export const NavBar: React.FC<NavBarProps> = ({
   ];
 
   return (
-    <nav className="flex items-center justify-between px-4 h-13 bg-zinc-950 border-b border-zinc-800 select-none shadow-md">
+    <nav className="flex items-center justify-between px-4 py-2 min-h-13 flex-wrap gap-2 shrink-0 bg-zinc-950 border-b border-zinc-800 select-none shadow-md">
       {/* Branding & Level Pill */}
       <div className="flex items-center gap-3">
         <span className="text-sm font-black bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent tracking-wide">
@@ -62,10 +62,9 @@ export const NavBar: React.FC<NavBarProps> = ({
             <div
               className="h-full bg-gradient-to-r from-indigo-500 to-amber-400 rounded-full"
               style={{
-                width: `${Math.min(
-                  100,
-                  Math.max(10, ((100 - (xpState.xpToNext % 100)) / 100) * 100)
-                )}%`,
+                width: `${xpState.level >= 9 ? 100 : Math.min(100,
+                  (xpState.totalXp - xpForLevel(xpState.level)) /
+                  (xpForLevel(xpState.level + 1) - xpForLevel(xpState.level)) * 100)}%`,
               }}
             />
           </div>

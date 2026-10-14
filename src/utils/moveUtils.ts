@@ -32,7 +32,7 @@ export function invertAlg(alg: string): string {
  * Returns null if they cancel; returns the merged token otherwise.
  */
 export function mergeMoves(a: string, b: string): string | null {
-  if (a[0] !== b[0]) return undefined as unknown as null; // different faces
+  if (a[0] !== b[0]) return null; // different faces
   const mod = (moveToQuarterTurns(a) + moveToQuarterTurns(b)) % 4;
   if (mod === 0) return null; // cancel
   return a[0] + quarterTurnsToSuffix((mod + 4) % 4);

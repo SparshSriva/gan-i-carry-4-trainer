@@ -5,18 +5,20 @@
  * - ScrambleAssistant state machine with dynamic error recovery
  * - HyperSpeedCube / Standard Ergonomic keyboard simulation
  * - XP, leveling, streak tracking, and gamified achievement feedback
- * - Real-time 54-facelet mathematical permutation tracking for NavaCakraYantra
+ * - Real-time cubing.js puzzle-state tracking and solved-state validation
  * - Synthesized sound effects (Web Audio API)
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AlgCase, TrainerPhase, AttemptResult } from '../types';
 import { ScrambleAssistant, ScrambleAssistantSnapshot } from '../utils/ScrambleAssistant';
-import { invertAlg, etmCount } from '../utils/moveUtils';
+import { invertAlg } from '../utils/moveUtils';
 import { loadCases, saveCases, appendAttempt, updateCaseStats } from '../utils/storage';
 import { selectNextCase } from '../utils/weightedSelection';
 import { KeybindPresetId, KEYBIND_PRESETS } from '../utils/keybinds';
 import { playTurnClick, playErrorBuzz, playSuccessChime, isSoundEnabled, setSoundEnabled } from '../utils/soundEffects';
+import { puzzles } from 'cubing/puzzles';
+import type { KPattern, KPuzzle } from 'cubing/kpuzzle';
 import { useXpSystem, XpState, XpEvent } from './useXpSystem';
 
 export interface TrainerState {
@@ -31,13 +33,16 @@ export interface TrainerState {
   xpState: XpState;
   lastXpEvent: XpEvent | null;
   streak: number;
+  moveHistory: string[];
+  puzzleReady: boolean;
   lastMove: string | null; // latest move executed
 }
 
 export interface TrainerActions {
   selectCase: (c: AlgCase) => void;
-  nextCase: () => void;
-  feedMove: (move: string) => void;
+  nextCase: (pool?: AlgCase[]) => void;
+  feedMove: (move: string, timestamp?: number) => void;
+  setSimulatorMode: (enabled: boolean) => void;
   syncSolvedState: () => void;
   toggleSimulator: () => void;
   setKeybindPreset: (preset: KeybindPresetId) => void;
@@ -46,9 +51,11 @@ export interface TrainerActions {
   dismissXpBanner: () => void;
 }
 
-export function useTrainerState(): [TrainerState, TrainerActions] {
+export function useTrainerState(keyboardEnabled = true): [TrainerState, TrainerActions] {
   const [cases, setCases] = useState<AlgCase[]>(() => loadCases());
-  const [phase, setPhase] = useState<TrainerPhase>('CASE_SELECTION');
+  const [phase, setPhaseState] = useState<TrainerPhase>('CASE_SELECTION');
+  const phaseRef = useRef<TrainerPhase>('CASE_SELECTION');
+  const setPhase = useCallback((next: TrainerPhase) => { phaseRef.current = next; setPhaseState(next); }, []);
   const [activeCase, setActiveCase] = useState<AlgCase | null>(null);
   const [scrambleSnap, setScrambleSnap] = useState<ScrambleAssistantSnapshot | null>(null);
   const [lastAttempt, setLastAttempt] = useState<AttemptResult | null>(null);
@@ -57,6 +64,23 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   const [soundActive, setSoundActive] = useState<boolean>(() => isSoundEnabled());
   const [lastXpEvent, setLastXpEvent] = useState<XpEvent | null>(null);
   const [lastMove, setLastMove] = useState<string | null>(null);
+
+  const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  const [puzzleReady, setPuzzleReady] = useState(false);
+  const puzzleRef = useRef<KPuzzle | null>(null);
+  const patternRef = useRef<KPattern | null>(null);
+  const activeRef = useRef<AlgCase | null>(null);
+  const executionMoves = useRef<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    puzzles['3x3x3'].kpuzzle().then(puzzle => {
+      if (cancelled) return;
+      puzzleRef.current = puzzle;
+      patternRef.current = puzzle.defaultPattern();
+      setPuzzleReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const { xpState, recordAttempt } = useXpSystem();
 
@@ -87,12 +111,12 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     setLastXpEvent(null);
   }, []);
 
-  const finishExecution = useCallback(() => {
-    if (!activeCase || !execStartRef.current || !recStartRef.current) return;
-    const execEnd = Date.now();
+  const finishExecution = useCallback((execEnd: number) => {
+    const activeCase = activeRef.current;
+    if (!activeCase || execStartRef.current === null || recStartRef.current === null) return;
     const recMs = Math.max(1, execStartRef.current - recStartRef.current);
     const execMs = Math.max(1, execEnd - execStartRef.current);
-    const moves = etmCount(activeCase.alg);
+    const moves = executionMoves.current.filter(m => !/^[xyz]/.test(m)).length;
     const tps = moves / (execMs / 1000);
     const ts = moveTimestamps.current;
     const deltas = ts.slice(1).map((t, i) => t - ts[i]);
@@ -104,6 +128,8 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
       tps,
       moveDeltas: deltas,
       timestamp: execEnd,
+      moves: [...executionMoves.current],
+      hadMistake: hadMistakeRef.current,
     };
 
     appendAttempt(result);
@@ -116,59 +142,57 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
 
     playSuccessChime();
     setPhase('REVIEW');
-  }, [activeCase, recordAttempt]);
+  }, [recordAttempt, setPhase]);
 
-  const feedMove = useCallback((move: string) => {
-    if (!activeCase) return;
-
+  const feedMove = useCallback((move: string, timestamp = Date.now()) => {
+    const currentPhase = phaseRef.current;
+    if (!activeRef.current || !patternRef.current ||
+        !['SCRAMBLING', 'ERROR_RECOVERY', 'RECOGNIZING', 'EXECUTING'].includes(currentPhase)) return;
+    patternRef.current = patternRef.current.applyMove(move);
+    setMoveHistory(prev => [...prev, move]);
     playTurnClick();
     setLastMove(move);
 
-    if (phase === 'SCRAMBLING' || phase === 'ERROR_RECOVERY') {
+    if (currentPhase === 'SCRAMBLING' || currentPhase === 'ERROR_RECOVERY') {
       assistantRef.current?.feedMove(move);
       const snap = assistantRef.current?.snapshot();
-      if (snap) {
-        setScrambleSnap(snap);
-        if (snap.assistantState === 'done') {
-          setPhase('RECOGNIZING');
-          recStartRef.current = Date.now();
-        } else if (snap.assistantState === 'error_recovery') {
-          setPhase('ERROR_RECOVERY');
-          hadMistakeRef.current = true;
-          playErrorBuzz();
-        } else {
-          setPhase('SCRAMBLING');
-        }
-      }
+      if (!snap) return;
+      setScrambleSnap(snap);
+      if (snap.assistantState === 'done') {
+        setPhase('RECOGNIZING');
+        recStartRef.current = timestamp;
+      } else if (snap.assistantState === 'error_recovery') {
+        setPhase('ERROR_RECOVERY');
+        hadMistakeRef.current = true;
+        playErrorBuzz();
+      } else setPhase('SCRAMBLING');
       return;
     }
 
-    if (phase === 'RECOGNIZING') {
-      execStartRef.current = Date.now();
-      moveTimestamps.current = [execStartRef.current];
+    // Rotations change the frame, but do not start the physical execution timer.
+    if (currentPhase === 'RECOGNIZING' && /^[xyz]/.test(move)) return;
+    if (currentPhase === 'RECOGNIZING') {
+      execStartRef.current = timestamp;
+      moveTimestamps.current = [];
+      executionMoves.current = [];
       setPhase('EXECUTING');
-      // count move as part of execution
     }
-
-    if (phase === 'EXECUTING') {
-      const now = Date.now();
-      moveTimestamps.current.push(now);
-
-      const expected = etmCount(activeCase.alg);
-      if (moveTimestamps.current.length >= expected + 1) {
-        finishExecution();
-      }
-    }
-  }, [phase, activeCase, finishExecution]);
+    executionMoves.current.push(move);
+    if (!/^[xyz]/.test(move)) moveTimestamps.current.push(timestamp);
+    if (patternRef.current.experimentalIsSolved({
+      ignorePuzzleOrientation: true, ignoreCenterOrientation: true,
+    })) finishExecution(timestamp);
+  }, [finishExecution, setPhase]);
 
   // Keyboard simulator event listener with current preset keymap
   useEffect(() => {
-    if (!simulatorMode) return;
+    if (!simulatorMode || !keyboardEnabled) return;
     const preset = KEYBIND_PRESETS[keybindPreset];
     const keyMap = preset.keyMap;
 
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey ||
+          (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, button, [contenteditable], [role=dialog]'))) return;
 
       // Escape resets to case selection
       if (e.key === 'Escape') {
@@ -186,26 +210,36 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [simulatorMode, keybindPreset, feedMove]);
+  }, [simulatorMode, keyboardEnabled, keybindPreset, feedMove, setPhase]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const selectCase = useCallback((c: AlgCase) => {
+    if (!puzzleRef.current) return;
+    activeRef.current = c;
+    patternRef.current = puzzleRef.current.defaultPattern();
+    setMoveHistory([]);
+    recStartRef.current = null;
+    execStartRef.current = null;
+    executionMoves.current = [];
+    moveTimestamps.current = [];
     hadMistakeRef.current = false;
     setLastXpEvent(null);
     setActiveCase(c);
     setLastMove(null);
 
-    const scramble = invertAlg(c.alg);
+    const scramble = c.setup || invertAlg(c.alg);
     const assistant = new ScrambleAssistant(scramble, setScrambleSnap);
     assistantRef.current = assistant;
     setScrambleSnap(assistant.snapshot());
     setPhase('SCRAMBLING');
-  }, []);
+  }, [setPhase]);
 
-  const nextCase = useCallback(() => {
+  const queueIds = useRef<string[] | null>(null);
+  const nextCase = useCallback((pool?: AlgCase[]) => {
+    if (pool) queueIds.current = pool.map(c => c.id);
     setLastXpEvent(null);
-    const next = selectNextCase(cases, {
+    const next = selectNextCase(cases.filter(c => !queueIds.current || queueIds.current.includes(c.id)), {
       statusFilter: ['unlearned', 'learning', 'learned'],
     });
     if (next) selectCase(next);
@@ -213,11 +247,15 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
 
   const syncSolvedState = useCallback(() => {
     setPhase('CASE_SELECTION');
+    activeRef.current = null;
+    assistantRef.current = null;
+    patternRef.current = puzzleRef.current?.defaultPattern() ?? null;
+    setMoveHistory([]);
     setActiveCase(null);
     setScrambleSnap(null);
     setLastXpEvent(null);
     setLastMove(null);
-  }, []);
+  }, [setPhase]);
 
   const toggleSimulator = useCallback(() => {
     setSimulatorMode(v => !v);
@@ -225,11 +263,12 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
 
   const updateCaseStatus = useCallback((id: string, status: AlgCase['status']) => {
     setCases(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+    setActiveCase(prev => prev?.id === id ? { ...prev, status } : prev);
   }, []);
 
   const state: TrainerState = {
     phase,
-    activeCase,
+    activeCase: cases.find(c => c.id === activeCase?.id) ?? activeCase,
     scrambleSnap,
     lastAttempt,
     cases,
@@ -240,12 +279,15 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     lastXpEvent,
     streak: xpState.streak,
     lastMove,
+    moveHistory,
+    puzzleReady,
   };
 
   const actions: TrainerActions = {
     selectCase,
     nextCase,
     feedMove,
+    setSimulatorMode,
     syncSolvedState,
     toggleSimulator,
     setKeybindPreset,

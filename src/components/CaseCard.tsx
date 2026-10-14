@@ -8,6 +8,7 @@ import { AlgCase } from '../types';
 interface CaseCardProps {
   activeCase: AlgCase | null;
   hideAlg: boolean;
+  concealCase: boolean;
   onToggleHideAlg: () => void;
   onStatusChange: (status: AlgCase['status']) => void;
   onHintReveal: () => void;
@@ -29,6 +30,7 @@ const STATUS_COLORS: Record<AlgCase['status'], string> = {
 export default function CaseCard({
   activeCase,
   hideAlg,
+  concealCase,
   onToggleHideAlg,
   onStatusChange,
   onHintReveal,
@@ -48,7 +50,7 @@ export default function CaseCard({
       <div className="flex items-start justify-between gap-2">
         <div>
           <span className="text-xs text-zinc-500 uppercase tracking-wide">{activeCase.subset}</span>
-          <h2 className="text-lg font-bold text-white leading-tight">{activeCase.name}</h2>
+          <h2 className="text-lg font-bold text-white leading-tight">{concealCase && !hintRevealed ? 'Recognize the case' : activeCase.name}</h2>
         </div>
         {/* Learning status selector */}
         <div className="flex gap-1">
@@ -68,7 +70,7 @@ export default function CaseCard({
 
       {/* Algorithm display */}
       <div className="relative">
-        {hideAlg && !hintRevealed ? (
+        {concealCase && !hintRevealed ? (
           <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/70 rounded-lg">
             <span className="text-zinc-600 text-sm italic">Algorithm hidden</span>
             <button

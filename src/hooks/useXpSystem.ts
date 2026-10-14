@@ -12,7 +12,7 @@
  * Stored in localStorage independently of case stats.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { AttemptResult } from '../types';
 
 const STORAGE_KEY = 'ganicv4_xp_v1';
@@ -63,43 +63,37 @@ export interface XpEvent {
   breakdown: string[];
 }
 
+export function awardXp(prev: XpState, result: AttemptResult, hadMistake: boolean): { state: XpState; event: XpEvent } {
+  const breakdown = ['+10 base'];
+  let base = 10;
+  if (result.tps > 10) { base += 10; breakdown.push('+10 TPS>10'); }
+  else if (result.tps > 5) { base += 5; breakdown.push('+5 TPS>5'); }
+  if (result.recognitionMs < 1000) { base += 7; breakdown.push('+7 fast recog'); }
+  else if (result.recognitionMs < 2000) { base += 3; breakdown.push('+3 recog<2s'); }
+  if (!hadMistake) { base += 5; breakdown.push('+5 clean setup'); }
+  const mult = hadMistake ? 1 : Math.min(1 + prev.streak * 0.1, 2);
+  if (mult > 1) breakdown.push(`×${mult.toFixed(1)} streak`);
+  const gained = Math.round(base * mult);
+  const totalXp = prev.totalXp + gained;
+  const { level, xpToNext } = computeLevel(totalXp);
+  const streak = hadMistake ? 0 : prev.streak + 1;
+  return {
+    state: { totalXp, level, xpToNext, streak, longestStreak: Math.max(prev.longestStreak, streak) },
+    event: { gained, newLevel: level > prev.level ? level : undefined, breakdown },
+  };
+}
+
 export function useXpSystem() {
   const [xpState, setXpState] = useState<XpState>(loadXpState);
-
+  const currentRef = useRef(xpState);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(xpState));
   }, [xpState]);
-
-  const recordAttempt = (result: AttemptResult, hadMistake: boolean): XpEvent => {
-    let gained = 0;
-    let newLevel: number | undefined;
-    const breakdown: string[] = [];
-
-    setXpState(prev => {
-      const newStreak = hadMistake ? 0 : prev.streak + 1;
-      const longestStreak = Math.max(prev.longestStreak, newStreak);
-
-      // Compute XP
-      let base = 10;
-      breakdown.push('+10 base');
-      if (result.tps > 10) { base += 10; breakdown.push('+10 TPS>10'); }
-      else if (result.tps > 5) { base += 5; breakdown.push('+5 TPS>5'); }
-      if (result.recognitionMs < 1000) { base += 7; breakdown.push('+7 fast recog'); }
-      else if (result.recognitionMs < 2000) { base += 3; breakdown.push('+3 recog<2s'); }
-      if (!hadMistake) { base += 5; breakdown.push('+5 clean'); }
-      const mult = Math.min(1 + prev.streak * 0.1, 2.0);
-      if (mult > 1) breakdown.push(`×${mult.toFixed(1)} streak`);
-      gained = Math.round(base * mult);
-
-      const newXp = prev.totalXp + gained;
-      const { level, xpToNext } = computeLevel(newXp);
-      if (level > prev.level) newLevel = level;
-
-      return { totalXp: newXp, level, xpToNext, streak: newStreak, longestStreak };
-    });
-
-    return { gained, newLevel, breakdown };
-  };
-
+  const recordAttempt = useCallback((result: AttemptResult, hadMistake: boolean): XpEvent => {
+    const reward = awardXp(currentRef.current, result, hadMistake);
+    currentRef.current = reward.state;
+    setXpState(reward.state);
+    return reward.event;
+  }, []);
   return { xpState, recordAttempt, levelName, xpForLevel, LEVEL_THRESHOLDS };
 }

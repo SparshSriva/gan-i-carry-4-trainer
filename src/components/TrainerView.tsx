@@ -7,7 +7,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TrainerPhase, AlgCase, AttemptResult } from '../types';
 import { ScrambleAssistantSnapshot } from '../utils/ScrambleAssistant';
-import { invertAlg } from '../utils/moveUtils';
 import { XpEvent } from '../hooks/useXpSystem';
 import CubeCanvas, { ViewMode } from './CubeCanvas';
 import TelemetryBar from './TelemetryBar';
@@ -26,9 +25,9 @@ interface TrainerViewProps {
   lastXpEvent: XpEvent | null;
   streak: number;
   simulatorMode: boolean;
-  lastMove: string | null;
+  moveHistory: string[];
   onSelectCase: (c: AlgCase) => void;
-  onNextCase: () => void;
+  onNextCase: (pool?: AlgCase[]) => void;
   onNextFromReview: () => void;
   onStatusChange: (id: string, status: AlgCase['status']) => void;
   onDismissXp: () => void;
@@ -44,7 +43,7 @@ export default function TrainerView({
   lastXpEvent,
   streak,
   simulatorMode,
-  lastMove,
+  moveHistory,
   onSelectCase,
   onNextCase,
   onNextFromReview,
@@ -57,13 +56,15 @@ export default function TrainerView({
   const [hideAlg, setHideAlg] = useState(false);
   const [hintRevealed, setHintRevealed] = useState(false);
 
-  // Reset hint on new case
+  const isScrambling = phase === 'SCRAMBLING';
+  // Reset hint on a new attempt
   useEffect(() => {
     setHintRevealed(false);
-  }, [activeCase?.id]);
+  }, [activeCase?.id, isScrambling]);
 
   // Spacebar hint reveal & Enter to continue
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.repeat || (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, button, [contenteditable], [role=dialog]'))) return;
     if (e.code === 'Space' && phase === 'RECOGNIZING' && hideAlg) {
       e.preventDefault();
       setHintRevealed(true);
@@ -79,18 +80,19 @@ export default function TrainerView({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const setupAlg = activeCase ? invertAlg(activeCase.alg) : '';
 
   const viewModes: { id: ViewMode; label: string; icon: typeof Box }[] = [
     { id: 'split', label: 'Dual View (3D + 2D)', icon: Columns },
     { id: '3d', label: '3D Cube', icon: Box },
-    { id: '2d', label: '2D Rails (Voxygen)', icon: GitGraph },
+    { id: '2d', label: 'Voxygen 2D', icon: GitGraph },
+    { id: 'net', label: 'Facelet Net', icon: Box },
+    { id: 'll', label: 'Last Layer', icon: Box },
   ];
 
   return (
-    <div className="flex h-full gap-4 p-4 overflow-hidden bg-zinc-950">
+    <div className="flex flex-col lg:flex-row h-full gap-4 p-4 overflow-y-auto bg-zinc-950">
       {/* ── Left Column: Cube & Visualizer + Telemetry ─────────────────────── */}
-      <div className="flex flex-col gap-3 w-[48%] max-w-[540px] min-w-[320px]">
+      <div className="flex flex-col gap-3 w-full lg:w-[48%] lg:max-w-[540px] shrink-0">
         {/* Visualizer Mode Switcher */}
         <div className="flex items-center justify-between bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
           <div className="flex flex-wrap gap-1">
@@ -116,10 +118,9 @@ export default function TrainerView({
 
         {/* Cube / Permutation Graph Canvas */}
         <CubeCanvas
-          setupAlg={phase !== 'CASE_SELECTION' ? setupAlg : ''}
-          alg={phase === 'REVIEW' && activeCase ? activeCase.alg : ''}
+          moveHistory={moveHistory}
           view={cubeView}
-          lastMove={lastMove}
+          interactive={simulatorMode && ['SCRAMBLING', 'ERROR_RECOVERY', 'RECOGNIZING', 'EXECUTING'].includes(phase)}
           onLayerClick={onFeedMove}
         />
 
@@ -140,8 +141,10 @@ export default function TrainerView({
       </div>
 
       {/* ── Right Column: Scramble Assistant + Case Card + Gamification ──── */}
-      <div className="flex flex-col gap-3 flex-1 min-w-0">
+      <div className="flex flex-col gap-3 flex-1 min-w-0 lg:overflow-y-auto">
         <StateBanner phase={phase} />
+        {phase === 'SCRAMBLING' && <p className="text-xs text-zinc-400">Start with a solved cube, white on top and green in front. Follow the setup below.</p>}
+        {phase === 'EXECUTING' && <p role="status" className="text-xs text-indigo-300">Keep solving. The attempt ends when the cube reaches the solved state.</p>}
 
         {/* Gamified XP Toast */}
         {phase === 'REVIEW' && lastXpEvent && (
@@ -193,6 +196,7 @@ export default function TrainerView({
             <CaseCard
               activeCase={activeCase}
               hideAlg={hideAlg}
+              concealCase={hideAlg && (phase === 'RECOGNIZING' || phase === 'EXECUTING')}
               onToggleHideAlg={() => setHideAlg(v => !v)}
               onStatusChange={(s) => activeCase && onStatusChange(activeCase.id, s)}
               onHintReveal={() => setHintRevealed(true)}

@@ -1,88 +1,55 @@
-# Technical Architecture & Agent Transfer Guide: GAN i Carry 4 Trainer
+# GAN i4 Trainer: architecture and milestone status
 
-## 1. Executive Summary & Mathematical Foundation
+Evaluated and updated October 14, 2026.
 
-This application is a speedcubing algorithm trainer and group-theory visualization suite for the **GAN i Carry 4** smart cube and keyboard simulators. It bridges physical hardware telemetry with real-time topological representations.
+## Current implementation
 
-### The 2D Permutation Graph (*NavaCakraYantra*)
-The puzzle state is mathematically modeled as an element of the permutation group $\mathcal{G} \le S_{54}$:
-* **9 Interlocking Circles:** The 3 spatial axes ($X, Y, Z$) each possess 3 parallel layers ($L, M, R$ for $X$; $U, E, D$ for $Y$; $F, S, B$ for $Z$). Each layer forms an independent circular track carrying 12 sticker nodes.
-* **54 Facelet Nodes:** The 54 outward stickers of the cube sit at the exact geometric intersections of circles from orthogonal axes. Every sticker belongs to exactly two circles (the two axes perpendicular to its outward normal).
-* **Gear-Action Permutations:** When a layer turns, its circle revolves, transporting its 12 nodes along the track by a discrete quarter-turn step ($\pm \pi / 2$).
+React 18 + TypeScript + Vite + Tailwind. `useTrainerState` owns the practice loop. A cubing.js KPuzzle pattern receives every setup and execution move. Attempts finish only when that pattern is solved, ignoring whole-cube and center orientation. A move count alone cannot finish an attempt. Recognition starts on the final setup turn; execution starts on the first non-rotation move. TPS uses received non-rotation moves, and deltas describe consecutive physical turns. Double turns received as one simulator event count as one turn; hardware quarter-turn packets count individually.
 
----
+`ScrambleAssistant` tracks exact setup tokens, partial half turns, and a stack of inverse corrections. A partial half turn persists across pauses and mistakes. Native double-turn simulator events and two same-direction hardware quarters both complete a half turn. Opposite quarters cancel. The correction stack also accepts quarter turns for a double-turn correction.
 
-## 2. Directory Structure & Key Modules
+`twisty-player` retains its required grid host display; forcing block display collapses the size-contained internal wrapper to zero height. `Twisty3DView` displays the complete received move history at its end position. The default dual view pairs 3D with the Voxygen-style six-face projection and nine rails. Voxygen 2D opens the full projection; Facelet Net and Last Layer remain separate views. The rail renderer consumes full move history, rebuilds after resets or remounts, and handles face, slice, wide, and rotation notation through the independent geometric model in `railMoves.ts`. Its face-turn buttons feed the trainer once and are enabled during keyboard practice. Fast input is caught up without a long animation backlog.
 
-```
-gan-i-carry-4-trainer/
-├── src/
-│   ├── components/
-│   │   ├── CubeCanvas.tsx              # Multi-mode visualizer (Dual View, Voxygen 2D, 9-Circles, 3D)
-│   │   ├── VoxygenRubik2D.tsx          # Stereographic 2D Rubik's cube with 9 closed looping rails
-│   │   ├── Twisty3DView.tsx            # Imperative WebGL 3D cube wrapper avoiding React custom-element errors
-│   │   ├── NavaCakraYantra.tsx         # The 9-Circles 54-node Permutation Graph SVG engine
-│   │   ├── PermGraph.tsx               # Top-down Last Layer cycle diagram with bezier arrows
-│   │   ├── NavBar.tsx                  # Header with XP/Level progression, streak flame, audio toggle
-│   │   ├── TrainerView.tsx             # Two-column layout with visualizer & scramble assistant
-│   │   ├── ScrambleStrip.tsx           # Dynamic scramble token strip with half-turn & error recovery
-│   │   ├── CaseCard.tsx                # Algorithm card with blind mode & stats
-│   │   ├── CaseSelector.tsx            # Filterable grid of PLL & OLL cases
-│   │   ├── TelemetryBar.tsx            # Granular recognition/execution splits & per-move delta bar chart
-│   │   ├── StateBanner.tsx             # State machine phase banner
-│   │   └── KeybindReferenceModal.tsx   # Interactive HyperSpeedCube keyboard layout tester
-│   ├── data/
-│   │   ├── algDatabase.ts              # Pre-loaded 21 PLL cases + 2-Look OLL cases
-│   │   └── navaCakraGeometry.ts        # Mathematical circle coordinates, belts, and permutation arrays
-│   ├── hooks/
-│   │   ├── useTrainerState.ts          # Core state machine, keyboard simulator listener, BLE hub
-│   │   └── useXpSystem.ts              # Gamified XP calculation, streak multiplier, tier progression
-│   ├── utils/
-│   │   ├── faceletSimulator.ts         # Pure mathematical facelet state transitions (54-char string)
-│   │   ├── keybinds.ts                 # HyperSpeedCube ergonomic home-row layout & direct notation
-│   │   ├── moveUtils.ts                # WCA notation parser, alg inversion, move merging (R + R = R2)
-│   │   ├── ScrambleAssistant.ts        # Scramble progress tracker, double-turn window, correction queue
-│   │   ├── soundEffects.ts             # Synthesized zero-latency Web Audio API click/beep/chimes
-│   │   ├── storage.ts                  # localStorage persistence for attempts and EMA statistics
-│   │   └── weightedSelection.ts        # Priority-weighted spaced-repetition algorithm
-│   ├── App.tsx                         # Root container
-│   ├── main.tsx                        # Entry point
-│   └── types.ts                        # Unified TypeScript interfaces
-```
+`ganBluetooth` delegates protocol handling to the installed `gan-web-bluetooth` package. The App forwards events through a ref to current trainer actions, avoiding connection-time closures. MAC addresses are cached per device rather than reused across devices. Connecting disables keyboard simulation. The i Carry has no orientation sensor, so hardware users must keep a consistent logical orientation.
 
----
+Cases, attempt history (up to 2,000 entries), and XP persist in localStorage. Reward calculation is pure and returns an immediate event; it does not mutate values inside React state updaters. The library supports search, learning status changes, and launching practice. Analytics supports per-case and last-seven-days filters, recognition/execution charts, move pause breakdowns, and recent attempts. Practice filters define the weighted queue when Random Next is used and remain in effect for subsequent Next Case actions.
 
-## 3. Operational Protocols & Subsystems
+## Milestones
 
-### 3.1 Scramble Assistant State Machine
-The scramble assistant implements dynamic error recovery:
-1. **Scramble Sequence**: Inverts the selected algorithm to position the cube into the required pre-state.
-2. **Double Turn Merging ($R2$)**: Physical sensors emit two single turns. A $250\text{ ms}$ window combines $R + R \to R2$ visually without flagging false errors.
-3. **Correction Queue**: If a user performs move $M_{\text{wrong}}$ instead of $M_{\text{expected}}$, progression halts. The inverse $M_{\text{wrong}}^{-1}$ is placed in the correction queue. The system resumes once the correction queue is cleared.
+| Milestone | Status | Remaining work |
+| --- | --- | --- |
+| 1: architecture and simulator | Implemented, simulator loop browser-tested | Audit case names/algorithms against standard case definitions; broaden accessibility |
+| 2: scramble assistant and move parser | Partial | Hardware slice/wide composite move decoding, rotation frame remapping, arbitrary-front detection, correction arrows |
+| 3: GAN Bluetooth | Adapter integrated; physical device unverified | Initial FACELETS hydration, reconnect/lost-packet behavior, orientation handling, real i Carry 4 acceptance test |
+| 4: telemetry and learning buckets | Core splits, storage, weighted queues, library, analytics implemented | Full 57 OLL and 41 F2L catalog, multi-status/manual queue selection, random AUF, custom algorithms, backup/export |
 
-### 3.2 HyperSpeedCube Keyboard Simulation
-Ergonomic home-row speedcubing layout:
-* **Right Hand**: `J` ($U$), `I` ($R$), `K` ($R'$), `M` ($R2$), `H` ($F$), `L` ($D'$), `P`/`O` ($B$/$B'$), `N` ($M$), `;` ($y$).
-* **Left Hand**: `F` ($U'$), `C` ($U2$), `D` ($L$), `E` ($L'$), `V` ($L2$), `G` ($F'$), `S` ($D$), `Z` ($D2$), `W`/`Q` ($B$/$B'$), `B` ($M'$), `A` ($y'$).
-* **Control Keys**: `Space` (Reveal Alg Hint), `Enter` (Next Case), `Esc` (Case Selector).
+Simulator slice/wide/rotation notation works through cubing.js. Hardware sensors only send outer face turns: the composite parser is not implemented, so hardware practice of cases using slices, wide moves, or rotations is not yet supported. FACELETS is exposed by the Bluetooth adapter but not hydrated into the trainer. Start with a physically solved cube, white on top and green in front, before selecting a case. Sync Solved resets the logical origin; it cannot solve the physical cube.
 
-### 3.3 Gamification Engine (*Karma-Phala*)
-* Solves award base XP ($10\text{ XP}$) with performance multipliers:
-  * High TPS ($>5\text{ TPS} \implies +5\text{ XP}$; $>10\text{ TPS} \implies +10\text{ XP}$).
-  * Quick Recognition ($<2\text{s} \implies +3\text{ XP}$; $<1\text{s} \implies +7\text{ XP}$).
-  * Flawless Solve ($+5\text{ XP}$).
-  * Multiplier Streak: $\text{multiplier} = \min(1 + 0.1 \times \text{streak}, 2.0)$.
-* Tier progression spans 10 ranks from *Beginner* to *Legend*.
+The current OLL starter catalog contains duplicate/mislabeled candidates inherited from the initial implementation. Inverse/algorithm identity tests prove round-trip correctness, not standard case classification. Do not claim the full catalog is complete or audited.
 
----
+## Verification
 
-## 4. Hardware Integration Roadmap (Milestone 3 for Next Agents)
+- `npm test`: source-level regression tests for half turns, cancellation, nested recovery, double-turn correction, library inverse round trips, non-solved arbitrary move sequences, weighted filters, deterministic XP, geometric rail moves and notation decompositions, and orientation normalization/persistence (18 tests).
+- `npm run build`: TypeScript and production Vite bundle.
+- `npm run lint`: ESLint, including the active Voxygen component.
+- Browser acceptance: Sune setup, repeated wrong execution turns staying in EXECUTING, recovery followed by solved completion, library search, populated analytics, repeated rail turns, single-event rail controls, mouse dragging, roll adjustment, keyboard view alignment without new puzzle moves, and alignment persistence across view changes.
+- Physical Bluetooth tests require a GAN cube and a Web Bluetooth-capable Chromium browser.
 
-When implementing the direct BLE GATT layer for the **GAN i Carry 4**:
-1. **BLE GATT Service**: GAN cubes communicate over proprietary GATT characteristics.
-2. **AES-128 CBC Decryption**: GAN Gen 4 packet payloads are encrypted with AES-128 CBC using a key salted with the cube's MAC address.
-3. **Browser Privacy Workaround**: Because Web Bluetooth hides the MAC address in Chromium, wire up the MAC address input modal in `NavBar` (persisting to `localStorage`).
-4. **Hardware Events Mapping**:
-   * Map incoming decrypted byte payloads directly into `feedMove(move)` in `useTrainerState.ts`.
-   * Update battery percentage via the `BATTERY` event.
-   * Send the initial facelet state via `FACELETS` event into `NavaCakraYantra`.
+## Public behavior references
+
+Feature inspiration is limited to public descriptions and this project's specification. No official app binaries, proprietary code, assets, or network protocols were extracted.
+
+- GAN describes tailored training in its smart-cubing ecosystem: https://www.gancube.com/pages/gan-smartcubing-ecosystem
+- GAN's published CubeStation listing describes teaching, training, and time trials: https://apps.apple.com/us/app/cubestation-new/id6473158674
+
+These references motivate local practice and performance review; this implementation does not claim feature parity with CubeStation.
+
+## Viewing orientation and future camera tracking
+
+Manual alignment is implemented for both the full 3D viewer and the 3D half of Dual View. Drag to orbit, use Turn/Tilt/Roll sliders for precise alignment, and Reset view for the default perspective. The pose persists independently of case state and move history. Clicking or dragging the 3D viewer does not inject puzzle moves. Face notation remains in the cube's logical frame; viewing alignment alone does not remap the Bluetooth move stream.
+
+`CubeOrientation` in `utils/cubeOrientation.ts` represents the displayed yaw, pitch, and roll in degrees. A pointer-capture surface handles mouse/touch dragging and keyboard arrows independently of puzzle turns. Requested orbit coordinates are sent to TwistyPlayer, and its resolved coordinates flow back to the saved pose; roll rotates the rendered viewing plane. This is a manual view adapter, not gyroscope emulation.
+
+Planned computer-vision work: opt-in camera capture; sticker/face identification; calibrated cube-to-camera pose estimation (quaternion or rotation matrix); confidence thresholds and temporal smoothing; handling occlusion and tracking loss; and an adapter from the calibrated pose to the viewer. Keep pose estimates separate from BLE face turns. A separate orientation-frame mapping will be required to support algorithms relative to the user's grip. Validate camera privacy, calibration, latency, and orientation conventions before enabling automatic updates. No camera capture or computer-vision tracking is implemented or enabled yet.
+
+See [ROADMAP.md](./ROADMAP.md) for ordered follow-up work and camera acceptance criteria.

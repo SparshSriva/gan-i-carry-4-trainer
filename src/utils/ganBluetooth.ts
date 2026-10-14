@@ -50,7 +50,7 @@ class GanBluetoothManager {
     // Custom MAC Address provider with localStorage caching and fallback callback
     const customMacProvider = async (device: BluetoothDevice, isFallbackCall?: boolean): Promise<string | null> => {
       const storageKey = `gan_cube_mac_${device.id}`;
-      const cachedMac = localStorage.getItem(storageKey) || localStorage.getItem('gan_cube_last_mac');
+      const cachedMac = localStorage.getItem(storageKey);
 
       if (cachedMac && !isFallbackCall) {
         return cachedMac;
@@ -61,12 +61,11 @@ class GanBluetoothManager {
         const userEnteredMac = await callbacks.onMacPrompt(device);
         if (userEnteredMac) {
           localStorage.setItem(storageKey, userEnteredMac);
-          localStorage.setItem('gan_cube_last_mac', userEnteredMac);
           return userEnteredMac;
         }
       }
 
-      return cachedMac || null;
+      return isFallbackCall ? null : cachedMac || null;
     };
 
     try {

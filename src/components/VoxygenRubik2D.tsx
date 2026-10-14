@@ -11,9 +11,8 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
-// Face colors: +x right, -x left, +y up, -y down, +z front, -z back.
-const COLORS = ['#DC2626', '#EA580C', '#FFFFFF', '#FFD700', '#16A34A', '#2563EB'];
-const T = 2 / 3;
+import { solvedStickers, rotate90, railTurns, isInTurn, applyRailTurn, RAIL_PITCH as T } from '../utils/railMoves';
+import type { RailTurn } from '../utils/railMoves';
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 const near3 = (p: number[], q: number[]) => near(p[0], q[0]) && near(p[1], q[1]) && near(p[2], q[2]);
@@ -52,16 +51,13 @@ interface MovePlan {
   kind: 'face' | 'ring';
   i0?: number;
   di?: number;
+  faceSign?: number;
   curve?: RailCurve;
   s0?: number;
   delta?: number;
 }
 
-interface ActiveAnim {
-  axis: number;
-  sign: number;
-  dir: number;
-  dur: number;
+interface ActiveAnim extends RailTurn {
   record: boolean;
   set: Sticker[];
   plans: MovePlan[];
@@ -143,46 +139,20 @@ function ease(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
 }
 
-function rotate90(p: number[], axis: number, dir: number): number[] {
-  const c1 = (axis + 1) % 3, c2 = (axis + 2) % 3;
-  const q = p.slice();
-  if (dir > 0) { q[c1] = -p[c2]; q[c2] = p[c1]; }
-  else         { q[c1] =  p[c2]; q[c2] = -p[c1]; }
-  return q;
-}
-
 function isCenter(st: Sticker): boolean {
   return st.p.filter(c => c === 0).length === 2;
 }
 
-function solvedStickers(): Sticker[] {
-  const list: Sticker[] = [];
-  let ci = 0;
-  for (let a = 0; a < 3; a++) {
-    for (const s of [1, -1]) {
-      for (const u of [-T, 0, T]) {
-        for (const v of [-T, 0, T]) {
-          const p = [0, 0, 0];
-          p[a] = s;
-          p[(a + 1) % 3] = u;
-          p[(a + 2) % 3] = v;
-          list.push({ p, color: COLORS[ci] });
-        }
-      }
-      ci++;
-    }
-  }
-  return list;
-}
-
 export interface VoxygenRubik2DProps {
-  lastMove?: string | null;
+  moveHistory: string[];
+  interactive?: boolean;
   onMoveExecuted?: (move: string) => void;
   className?: string;
 }
 
 export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
-  lastMove = null,
+  moveHistory,
+  interactive = false,
   onMoveExecuted,
   className = '',
 }) => {
@@ -206,7 +176,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
     dpr: number;
     selected: { axis: number; sign: number } | null;
     anim: ActiveAnim | null;
-    queue: { axis: number; sign: number; dir: number; dur: number }[];
+    queue: RailTurn[];
     rafId: number;
   }>({
     stickers: solvedStickers(),
@@ -234,34 +204,24 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
     return sign > 0 ? 'F' : 'B';
   };
 
-  const getAxisSignFromName = (name: string): { axis: number; sign: number } => {
-    const n = name.toUpperCase();
-    if (n === 'R') return { axis: 0, sign: 1 };
-    if (n === 'L') return { axis: 0, sign: -1 };
-    if (n === 'U') return { axis: 1, sign: 1 };
-    if (n === 'D') return { axis: 1, sign: -1 };
-    if (n === 'F') return { axis: 2, sign: 1 };
-    return { axis: 2, sign: -1 }; // B
-  };
-
-  const faceOf = (a: number, s: number): FaceTransform => {
+  const faceOf = useCallback((a: number, s: number): FaceTransform => {
     return stateRef.current.faces[a][s > 0 ? 0 : 1];
-  };
+  }, []);
 
-  const facePoint = (a: number, s: number, u: number, v: number): [number, number] => {
+  const facePoint = useCallback((a: number, s: number, u: number, v: number): [number, number] => {
     const f = faceOf(a, s);
     const wx = u, wy = f.mirror ? -v : v;
     return [f.A.x * wx - f.A.y * wy + f.B.x, f.A.x * wy + f.A.y * wx + f.B.y];
-  };
+  }, [faceOf]);
 
-  const L = (p: number[]): [number, number] => {
+  const L = useCallback((p: number[]): [number, number] => {
     for (let a = 0; a < 3; a++) {
       if (p[a] === 1 || p[a] === -1) {
         return facePoint(a, p[a], p[(a + 1) % 3], p[(a + 2) % 3]);
       }
     }
     return [0, 0];
-  };
+  }, [facePoint]);
 
   const faceLocal = (f: FaceTransform, x: number, y: number): [number, number] => {
     const dx = x - f.B.x, dy = y - f.B.y;
@@ -315,7 +275,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
         state.curves.push({ a, c, slots, path: { pts, cum, total, slotS: slotIdx.map(i => cum[i]) } });
       }
     }
-  }, []);
+  }, [L]);
 
   const buildFaces = useCallback(() => {
     const s = stateRef.current;
@@ -341,7 +301,22 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
       };
     }
     buildCurves();
-  }, [buildCurves]);
+    // Fit the complete rails and sticker radii, including the outermost face.
+    const points = [...s.curves.flatMap(c => c.path.pts), ...solvedStickers().map(st => L(st.p))];
+    const minX = Math.min(...points.map(p => p[0])), maxX = Math.max(...points.map(p => p[0]));
+    const minY = Math.min(...points.map(p => p[1])), maxY = Math.max(...points.map(p => p[1]));
+    const margin = s.DOT + 18;
+    const scale = Math.min(1, (s.cw - margin * 2) / (maxX - minX), (s.ch - margin * 2) / (maxY - minY));
+    const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+    for (const axis of s.faces) for (const f of axis) {
+      f.A.x *= scale; f.A.y *= scale;
+      f.B.x = s.cx + (f.B.x - midX) * scale;
+      f.B.y = s.cy + (f.B.y - midY) * scale;
+    }
+    s.PITCH *= scale;
+    s.DOT *= scale;
+    buildCurves();
+  }, [buildCurves, L]);
 
   const renderWires = useCallback(() => {
     const s = stateRef.current;
@@ -380,7 +355,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
       g.stroke();
     }
-  }, []);
+  }, [faceOf]);
 
   const pathPoint = (path: RailCurve['path'], s: number): [number, number] => {
     let m = s % path.total;
@@ -396,9 +371,9 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
     return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f];
   };
 
-  const curveFor = (a: number, c: number): RailCurve | undefined => {
+  const curveFor = useCallback((a: number, c: number): RailCurve | undefined => {
     return stateRef.current.curves.find(cv2 => cv2.a === a && near(cv2.c, c));
-  };
+  }, []);
 
   const movingSet = (axis: number, sign: number): Sticker[] => {
     return stateRef.current.stickers.filter(st => sign * st.p[axis] > 0.34);
@@ -408,11 +383,11 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
     return stateRef.current.stickers.find(st => isCenter(st) && st.p[axis] === sign);
   };
 
-  const startNext = (now: number) => {
+  const startNext = useCallback((now: number) => {
     const s = stateRef.current;
     const m = s.queue.shift();
     if (!m) return;
-    const set = movingSet(m.axis, m.sign);
+    const set = s.stickers.filter(st => isInTurn(st, m));
     const plans: MovePlan[] = [];
 
     for (const st of set) {
@@ -420,7 +395,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
         const u = st.p[(m.axis + 1) % 3], v = st.p[(m.axis + 2) % 3];
         if (u === 0 && v === 0) continue;
         const i0 = SLOT8.findIndex(q => near(q[0], u) && near(q[1], v));
-        plans.push({ st, kind: 'face', i0, di: 2 * m.dir });
+        plans.push({ st, kind: 'face', i0, di: 2 * m.dir, faceSign: st.p[m.axis] });
       } else {
         const curve = curveFor(m.axis, st.p[m.axis]);
         if (!curve) continue;
@@ -433,41 +408,35 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
       }
     }
     s.anim = { ...m, set, plans, start: now, record: false };
-  };
+  }, [curveFor]);
 
   const commit = (m: ActiveAnim) => {
     for (const st of m.set) st.p = rotate90(st.p, m.axis, m.dir);
   };
 
-  const pushMove = useCallback((axis: number, sign: number, dir: number, dur = 220) => {
-    stateRef.current.queue.push({ axis, sign, dir, dur });
-  }, []);
-
-  // Map WCA Move string ('R', "U'", 'F2', etc.) to Voxygen { axis, sign, dir }
-  const executeWcaMove = useCallback((move: string) => {
-    const face = move[0].toUpperCase();
-    const { axis, sign } = getAxisSignFromName(face);
-    const isDouble = move.includes('2');
-    const isPrime = move.includes("'");
-
-    // Natural clockwise direction based on face sign
-    const baseDir = sign > 0 ? -1 : 1;
-    const dir = isPrime ? -baseDir : baseDir;
-
-    if (isDouble) {
-      pushMove(axis, sign, dir, 140);
-      pushMove(axis, sign, dir, 140);
-    } else {
-      pushMove(axis, sign, dir, 220);
-    }
-  }, [pushMove]);
-
-  // Sync external lastMove prop
+  const consumedHistory = useRef<string[]>([]);
+  // Rebuild on mount/reset, append every event (including repeated identical turns).
   useEffect(() => {
-    if (lastMove) {
-      executeWcaMove(lastMove);
+    const s = stateRef.current;
+    const previous = consumedHistory.current;
+    const extendsHistory = previous.length <= moveHistory.length && previous.every((m, i) => m === moveHistory[i]);
+    if (!extendsHistory || previous.length === 0) {
+      s.stickers = solvedStickers();
+      s.anim = null;
+      s.queue = [];
+      for (const move of moveHistory) for (const turn of railTurns(move)) applyRailTurn(s.stickers, turn);
+    } else {
+      s.queue.push(...moveHistory.slice(previous.length).flatMap(railTurns));
+      // Keep fast input responsive instead of accumulating seconds of animation.
+      if (s.queue.length > 6) {
+        if (s.anim) applyRailTurn(s.stickers, s.anim);
+        for (const turn of s.queue) applyRailTurn(s.stickers, turn);
+        s.anim = null;
+        s.queue = [];
+      }
     }
-  }, [lastMove, executeWcaMove]);
+    consumedHistory.current = [...moveHistory];
+  }, [moveHistory]);
 
   // Main Draw Loop
   useEffect(() => {
@@ -477,6 +446,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
     if (!ctx) return;
 
     let running = true;
+    const state = stateRef.current;
 
     const draw = (now: number) => {
       if (!running) return;
@@ -486,7 +456,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
         startNext(now);
       }
 
-      let animPos = new Map<Sticker, [number, number]>();
+      const animPos = new Map<Sticker, [number, number]>();
       let animEase = 0;
       if (s.anim) {
         let t = (now - s.anim.start) / s.anim.dur;
@@ -508,7 +478,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
               const i = Math.floor(pos) % 8, f = pos - Math.floor(pos);
               const p0 = SLOT8[i], p1 = SLOT8[(i + 1) % 8];
               const u = p0[0] + (p1[0] - p0[0]) * f, v = p0[1] + (p1[1] - p0[1]) * f;
-              animPos.set(pl.st, facePoint(s.anim.axis, s.anim.sign, u, v));
+              animPos.set(pl.st, facePoint(s.anim.axis, pl.faceSign ?? 1, u, v));
             }
           }
         }
@@ -535,7 +505,7 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
           const a = st.p.findIndex(c => c !== 0);
           const f = faceOf(a, st.p[a]);
           let ang = Math.atan2(f.A.y, f.A.x);
-          if (s.anim && a === s.anim.axis && st.p[a] === s.anim.sign) {
+          if (s.anim && a === s.anim.axis && isInTurn(st, s.anim)) {
             ang += (f.mirror ? -1 : 1) * s.anim.dir * (Math.PI / 2) * animEase;
           }
 
@@ -590,9 +560,9 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
 
     return () => {
       running = false;
-      cancelAnimationFrame(stateRef.current.rafId);
+      cancelAnimationFrame(state.rafId);
     };
-  }, []);
+  }, [L, facePoint, faceOf, startNext]);
 
   // Handle Container Resizing
   useEffect(() => {
@@ -657,12 +627,6 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
     const s = stateRef.current;
     if (!s.selected) return;
 
-    const f = faceOf(s.selected.axis, s.selected.sign);
-    const m = f.mirror ? -1 : 1;
-    const dir = (cwWanted ? -1 : 1) * m;
-
-    pushMove(s.selected.axis, s.selected.sign, dir, 220);
-
     const faceName = getFaceName(s.selected.axis, s.selected.sign);
     const moveStr = cwWanted ? faceName : `${faceName}'`;
     if (onMoveExecuted) onMoveExecuted(moveStr);
@@ -670,12 +634,15 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
 
   return (
     <div
+      data-testid="voxygen-view"
+      data-move-count={moveHistory.length}
       ref={containerRef}
       className={`relative w-full h-full min-h-[220px] bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 shadow-xl select-none ${className}`}
     >
       <canvas
         ref={canvasRef}
         onClick={handleCanvasClick}
+        aria-label="Voxygen-style six-face cube projection with nine rails"
         className="w-full h-full block cursor-pointer"
       />
 
@@ -689,16 +656,18 @@ export const VoxygenRubik2D: React.FC<VoxygenRubik2DProps> = ({
       <div className="absolute inset-x-2 bottom-2 z-10 flex justify-between pointer-events-none">
         <button
           onClick={() => handleRotateSelected(false)}
-          title={`Rotate ${selectedFaceName}' (Counter-Clockwise)`}
-          className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white shadow-lg active:scale-95 transition-all text-xs font-bold font-mono"
+          disabled={!interactive}
+          aria-label={`Rotate ${selectedFaceName}' (Counter-Clockwise)`}
+          className="pointer-events-auto disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center w-9 h-9 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white shadow-lg active:scale-95 transition-all text-xs font-bold font-mono"
         >
           ↺
         </button>
 
         <button
           onClick={() => handleRotateSelected(true)}
-          title={`Rotate ${selectedFaceName} (Clockwise)`}
-          className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white shadow-lg active:scale-95 transition-all text-xs font-bold font-mono"
+          disabled={!interactive}
+          aria-label={`Rotate ${selectedFaceName} (Clockwise)`}
+          className="pointer-events-auto disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center w-9 h-9 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white shadow-lg active:scale-95 transition-all text-xs font-bold font-mono"
         >
           ↻
         </button>
