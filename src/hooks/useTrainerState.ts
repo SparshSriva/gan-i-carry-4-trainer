@@ -1,8 +1,11 @@
 /**
  * useTrainerState.ts — central React state hook for the trainer loop.
  *
- * Manages the AppState machine, timing, and glues together the
- * ScrambleAssistant, keyboard simulator, and (later) the BLE manager.
+ * Integrates:
+ * - ScrambleAssistant state machine with dynamic error recovery
+ * - HyperSpeedCube / Standard Ergonomic keyboard simulation
+ * - XP, leveling, streak tracking, and gamified achievement feedback
+ * - Synthesized sound effects (Web Audio API)
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -11,17 +14,9 @@ import { ScrambleAssistant, ScrambleAssistantSnapshot } from '../utils/ScrambleA
 import { invertAlg, etmCount } from '../utils/moveUtils';
 import { loadCases, saveCases, appendAttempt, updateCaseStats } from '../utils/storage';
 import { selectNextCase } from '../utils/weightedSelection';
-
-// ─── Keyboard → Move map (simulator mode) ────────────────────────────────────
-// Keys chosen to avoid browser conflicts; user-facing labels are in the UI.
-const KEY_MOVE_MAP: Record<string, string> = {
-  'u': 'U', 'i': "U'",
-  'h': 'R', 'j': "R'",
-  'f': 'F', 'd': "F'",
-  'k': 'L', 'l': "L'",
-  'r': 'B', 'e': "B'",
-  'n': 'D', 'm': "D'",
-};
+import { KeybindPresetId, KEYBIND_PRESETS } from '../utils/keybinds';
+import { playTurnClick, playErrorBuzz, playSuccessChime, isSoundEnabled, setSoundEnabled } from '../utils/soundEffects';
+import { useXpSystem, XpState, XpEvent } from './useXpSystem';
 
 export interface TrainerState {
   phase: TrainerPhase;
@@ -30,6 +25,11 @@ export interface TrainerState {
   lastAttempt: AttemptResult | null;
   cases: AlgCase[];
   simulatorMode: boolean;
+  keybindPreset: KeybindPresetId;
+  soundEnabled: boolean;
+  xpState: XpState;
+  lastXpEvent: XpEvent | null;
+  streak: number;
 }
 
 export interface TrainerActions {
@@ -38,7 +38,10 @@ export interface TrainerActions {
   feedMove: (move: string) => void;
   syncSolvedState: () => void;
   toggleSimulator: () => void;
+  setKeybindPreset: (preset: KeybindPresetId) => void;
+  toggleSound: () => void;
   updateCaseStatus: (id: string, status: AlgCase['status']) => void;
+  dismissXpBanner: () => void;
 }
 
 export function useTrainerState(): [TrainerState, TrainerActions] {
@@ -48,6 +51,11 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   const [scrambleSnap, setScrambleSnap] = useState<ScrambleAssistantSnapshot | null>(null);
   const [lastAttempt, setLastAttempt] = useState<AttemptResult | null>(null);
   const [simulatorMode, setSimulatorMode] = useState(true);
+  const [keybindPreset, setKeybindPresetState] = useState<KeybindPresetId>('hyperspeedcube');
+  const [soundActive, setSoundActive] = useState<boolean>(() => isSoundEnabled());
+  const [lastXpEvent, setLastXpEvent] = useState<XpEvent | null>(null);
+
+  const { xpState, recordAttempt } = useXpSystem();
 
   const assistantRef = useRef<ScrambleAssistant | null>(null);
   const recStartRef = useRef<number | null>(null);
@@ -55,57 +63,34 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   const moveTimestamps = useRef<number[]>([]);
   const hadMistakeRef = useRef(false);
 
-  // ── Persist case changes ───────────────────────────────────────────────────
-  useEffect(() => { saveCases(cases); }, [cases]);
+  // Persist case changes
+  useEffect(() => {
+    saveCases(cases);
+  }, [cases]);
 
-  // ── Keyboard simulator ─────────────────────────────────────────────────────
-  const feedMove = useCallback((move: string) => {
-    if (!activeCase) return;
+  const toggleSound = useCallback(() => {
+    setSoundActive(prev => {
+      const next = !prev;
+      setSoundEnabled(next);
+      return next;
+    });
+  }, []);
 
-    if (phase === 'SCRAMBLING' || phase === 'ERROR_RECOVERY') {
-      assistantRef.current?.feedMove(move);
-      const snap = assistantRef.current?.snapshot();
-      if (snap) {
-        setScrambleSnap(snap);
-        if (snap.assistantState === 'done') {
-          setPhase('RECOGNIZING');
-          recStartRef.current = Date.now();
-        } else if (snap.assistantState === 'error_recovery') {
-          setPhase('ERROR_RECOVERY');
-          hadMistakeRef.current = true;
-        } else {
-          setPhase('SCRAMBLING');
-        }
-      }
-      return;
-    }
+  const setKeybindPreset = useCallback((p: KeybindPresetId) => {
+    setKeybindPresetState(p);
+  }, []);
 
-    if (phase === 'RECOGNIZING') {
-      // First physical move starts execution
-      execStartRef.current = Date.now();
-      moveTimestamps.current = [execStartRef.current];
-      setPhase('EXECUTING');
-      // fall through — count this move
-    }
-
-    if (phase === 'EXECUTING') {
-      const now = Date.now();
-      moveTimestamps.current.push(now);
-
-      // Simple heuristic: execution ends when expected ETM move count reached
-      const expected = etmCount(activeCase.alg);
-      if (moveTimestamps.current.length >= expected + 1) {
-        finishExecution();
-      }
-    }
-  }, [phase, activeCase]);
+  const dismissXpBanner = useCallback(() => {
+    setLastXpEvent(null);
+  }, []);
 
   const finishExecution = useCallback(() => {
     if (!activeCase || !execStartRef.current || !recStartRef.current) return;
     const execEnd = Date.now();
-    const recMs = execStartRef.current - recStartRef.current;
-    const execMs = execEnd - execStartRef.current;
-    const tps = etmCount(activeCase.alg) / (execMs / 1000);
+    const recMs = Math.max(1, execStartRef.current - recStartRef.current);
+    const execMs = Math.max(1, execEnd - execStartRef.current);
+    const moves = etmCount(activeCase.alg);
+    const tps = moves / (execMs / 1000);
     const ts = moveTimestamps.current;
     const deltas = ts.slice(1).map((t, i) => t - ts[i]);
 
@@ -121,24 +106,89 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     appendAttempt(result);
     setCases(prev => updateCaseStats(prev, result, hadMistakeRef.current));
     setLastAttempt(result);
-    setPhase('REVIEW');
-  }, [activeCase]);
 
+    // Gamification: compute and award XP
+    const event = recordAttempt(result, hadMistakeRef.current);
+    setLastXpEvent(event);
+
+    playSuccessChime();
+    setPhase('REVIEW');
+  }, [activeCase, recordAttempt]);
+
+  const feedMove = useCallback((move: string) => {
+    if (!activeCase) return;
+
+    playTurnClick();
+
+    if (phase === 'SCRAMBLING' || phase === 'ERROR_RECOVERY') {
+      assistantRef.current?.feedMove(move);
+      const snap = assistantRef.current?.snapshot();
+      if (snap) {
+        setScrambleSnap(snap);
+        if (snap.assistantState === 'done') {
+          setPhase('RECOGNIZING');
+          recStartRef.current = Date.now();
+        } else if (snap.assistantState === 'error_recovery') {
+          setPhase('ERROR_RECOVERY');
+          hadMistakeRef.current = true;
+          playErrorBuzz();
+        } else {
+          setPhase('SCRAMBLING');
+        }
+      }
+      return;
+    }
+
+    if (phase === 'RECOGNIZING') {
+      execStartRef.current = Date.now();
+      moveTimestamps.current = [execStartRef.current];
+      setPhase('EXECUTING');
+      // count move as part of execution
+    }
+
+    if (phase === 'EXECUTING') {
+      const now = Date.now();
+      moveTimestamps.current.push(now);
+
+      const expected = etmCount(activeCase.alg);
+      if (moveTimestamps.current.length >= expected + 1) {
+        finishExecution();
+      }
+    }
+  }, [phase, activeCase, finishExecution]);
+
+  // Keyboard simulator event listener with current preset keymap
   useEffect(() => {
     if (!simulatorMode) return;
+    const preset = KEYBIND_PRESETS[keybindPreset];
+    const keyMap = preset.keyMap;
+
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      const move = KEY_MOVE_MAP[e.key.toLowerCase()];
-      if (move) feedMove(move);
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Escape resets to case selection
+      if (e.key === 'Escape') {
+        setPhase('CASE_SELECTION');
+        return;
+      }
+
+      // Check direct key match (case sensitive for shift, e.g. 'U') then lower-case
+      const move = keyMap[e.key] || keyMap[e.key.toLowerCase()];
+      if (move) {
+        e.preventDefault();
+        feedMove(move);
+      }
     };
+
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [simulatorMode, feedMove]);
+  }, [simulatorMode, keybindPreset, feedMove]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const selectCase = useCallback((c: AlgCase) => {
     hadMistakeRef.current = false;
+    setLastXpEvent(null);
     setActiveCase(c);
     const scramble = invertAlg(c.alg);
     const assistant = new ScrambleAssistant(scramble, setScrambleSnap);
@@ -148,6 +198,7 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   }, []);
 
   const nextCase = useCallback(() => {
+    setLastXpEvent(null);
     const next = selectNextCase(cases, {
       statusFilter: ['unlearned', 'learning', 'learned'],
     });
@@ -155,10 +206,10 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
   }, [cases, selectCase]);
 
   const syncSolvedState = useCallback(() => {
-    // Will hook into BLE in Milestone 3; for now just resets phase
     setPhase('CASE_SELECTION');
     setActiveCase(null);
     setScrambleSnap(null);
+    setLastXpEvent(null);
   }, []);
 
   const toggleSimulator = useCallback(() => {
@@ -176,6 +227,11 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     lastAttempt,
     cases,
     simulatorMode,
+    keybindPreset,
+    soundEnabled: soundActive,
+    xpState,
+    lastXpEvent,
+    streak: xpState.streak,
   };
 
   const actions: TrainerActions = {
@@ -184,7 +240,10 @@ export function useTrainerState(): [TrainerState, TrainerActions] {
     feedMove,
     syncSolvedState,
     toggleSimulator,
+    setKeybindPreset,
+    toggleSound,
     updateCaseStatus,
+    dismissXpBanner,
   };
 
   return [state, actions];
