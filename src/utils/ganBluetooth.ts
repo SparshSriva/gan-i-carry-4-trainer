@@ -41,6 +41,17 @@ class GanBluetoothManager {
   private moveGuard=new GanMoveGuard();
   private trackingSuspended=false;
   private connecting=false;
+  private connectionLog:string[]=[];
+  private logStart=0;
+  private record(message:string) {
+    this.connectionLog.push(`+${Math.round(performance.now()-this.logStart)}ms ${message}`);
+    if(this.connectionLog.length>200)this.connectionLog.shift();
+  }
+  public exportConnectionLog():string {
+    return ['GAN connection diagnostic · gan-web-bluetooth 3.0.2',
+      `Exported: ${new Date().toISOString()}`,`Browser: ${navigator.userAgent??'unknown'}`,
+      'No MAC address, device ID, or raw packets are intentionally recorded.',...this.connectionLog].join('\n');
+  }
 
   /** Check if the current browser environment supports the Web Bluetooth API */
   public isSupported(): boolean {
@@ -59,12 +70,20 @@ class GanBluetoothManager {
     }
 
     this.connecting=true;
+    this.connectionLog=[];this.logStart=performance.now();
+    this.record(`Starting ${callbacks.bridgeDevice?'native bridge':'Web Bluetooth'} connection`);
+    const progress=(message:string)=>{this.record(message);callbacks.onConnectionProgress?.(message);};
     let restoreDiscovery:(()=>void)|undefined;
     let selectedDevice:BluetoothDevice|undefined;
     // Custom MAC Address provider with localStorage caching and fallback callback
     const customMacProvider = async (device: BluetoothDevice, isFallbackCall?: boolean): Promise<string | null> => {
       selectedDevice=device;
-      if(!isFallbackCall && device.gatt && !restoreDiscovery)restoreDiscovery=stabilizeGattDiscovery(device.gatt,callbacks.onConnectionProgress);
+      if(!isFallbackCall){
+        this.record(`Selected device: ${device.name??'(unnamed)'}`);
+        device.addEventListener?.('gattserverdisconnected',recordLinkDisconnect);
+        if(device.gatt && !restoreDiscovery)restoreDiscovery=stabilizeGattDiscovery(device.gatt,progress);
+      }
+      this.record(isFallbackCall?'Advertisement MAC lookup exhausted; requesting address fallback':'Checking cached address before advertisement lookup');
       const storageKey = `gan_cube_mac_${device.id}`;
       let cachedMac:string|null=null;
       try {const stored=localStorage.getItem(storageKey);if(/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(stored??''))cachedMac=stored;}catch{/* Cache availability must not block Bluetooth. */}
@@ -85,8 +104,10 @@ class GanBluetoothManager {
       return isFallbackCall ? null : cachedMac || null;
     };
 
+    const recordLinkDisconnect=()=>this.record('GATT disconnected event');
     try {
       const conn = callbacks.bridgeDevice?await connectNativeBridge(callbacks.bridgeDevice.id,callbacks.bridgeDevice.mac):await connectGanCube(customMacProvider);
+      this.record('GAN driver created; notification subscription started');
       this.connection = conn;
       this.moveGuard.reset();this.trackingSuspended=false;
 
@@ -109,19 +130,22 @@ class GanBluetoothManager {
         },
       });
 
-      const initialFacelets=await initializeCubeConnection(conn,callbacks.onConnectionProgress);
+      const initialFacelets=await initializeCubeConnection(conn,progress);
 
       if(this.connection!==conn)throw new Error('The cube disconnected while connecting. Try connecting again.');
       callbacks.onFacelets?.(initialFacelets);
+      this.record('Ready: decoded initial cube state accepted');
 
       return conn;
     } catch (err) {
+      const failure=err as {name?:string;message?:string};
+      this.record(`Setup failed: ${failure.name??'Error'}: ${failure.message??'Unknown failure'}`);
       await this.disconnect();
       // connectGanCube can fail before returning its connection object.
       // Close the selected device's partial GATT link in that case as well.
       if(selectedDevice?.gatt?.connected)selectedDevice.gatt.disconnect();
       throw err;
-    }finally{restoreDiscovery?.();this.connecting=false;}
+    }finally{restoreDiscovery?.();selectedDevice?.removeEventListener?.('gattserverdisconnected',recordLinkDisconnect);this.connecting=false;}
   }
 
   private handleEvent(event: GanCubeEvent, callbacks: GanBluetoothCallbacks) {
@@ -157,6 +181,7 @@ class GanBluetoothManager {
         break;
 
       case 'HARDWARE':
+        this.record(`Hardware response: ${event.hardwareName??'unknown'}; firmware ${event.softwareVersion??'unknown'}; gyro ${event.gyroSupported??'unknown'}`);
         if (callbacks.onHardware) {
           callbacks.onHardware({
             hardwareName: event.hardwareName,
@@ -169,6 +194,7 @@ class GanBluetoothManager {
         break;
 
       case 'DISCONNECT':
+        this.record('Driver DISCONNECT event');
         if (callbacks.onDisconnect) {
           callbacks.onDisconnect();
         }

@@ -16,6 +16,7 @@ export function stabilizeGattDiscovery(
         return await operation();
       }catch(error){
         const e=error as {name?:string;message?:string};
+        progress(`GATT attempt ${attempt+1}/3 failed (connected=${gatt.connected}): ${e.name??'Error'}: ${e.message??'Unknown failure'}`);
         const transient=e.name==='NetworkError' || /disconnected|GATT|connection/i.test(e.message??'');
         if(!transient || e.name==='SecurityError' || e.name==='NotAllowedError' || attempt===2)throw error;
       }
@@ -25,8 +26,9 @@ export function stabilizeGattDiscovery(
   gatt.connect=()=>attempt(()=>{progress('Connecting to selected cube GATT server…');return connect.call(gatt);});
   gatt.getPrimaryServices=service=>attempt(async()=>{
     if(!gatt.connected)await connect.call(gatt);
-    progress('Reading cube Bluetooth services…');
+    progress(`Reading cube Bluetooth services (connected=${gatt.connected})…`);
     const services=await original.call(gatt,service);
+    progress(`Discovered services: ${services.map(s=>s.uuid).join(', ') || 'none'}`);
     const supported=['6e400001-b5a3-f393-e0a9-e50e24dc4179','8653000a-43e6-47b7-9cb0-5fc21d4ae340','00000010-0000-fff7-fff6-fff5fff4fff0'];
     const generation=services.map(s=>supported.indexOf(s.uuid.toLowerCase())).find(i=>i>=0);
     if(generation!==undefined)progress(`GAN Gen${generation+2} service found; setting up notifications…`);

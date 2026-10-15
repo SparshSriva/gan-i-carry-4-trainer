@@ -143,6 +143,12 @@ export default function App() {
     }catch(err){setHardwareIssue(`Cube reset failed: ${err instanceof Error?err.message:'Bluetooth command failed'}. Reconnect before continuing.`);}
   };
 
+  const downloadConnectionLog=()=>{
+    const url=URL.createObjectURL(new Blob([ganBluetooth.exportConnectionLog()],{type:'text/plain'}));
+    const link=document.createElement('a');link.href=url;link.download='gan-connection-log.txt';link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+
   const handleMacSubmit = (mac: string) => {
     if (macModal.resolve) {
       macModal.resolve(mac);
@@ -190,6 +196,7 @@ export default function App() {
       />
       <div className="px-4 py-2 border-b border-zinc-800 text-xs text-zinc-400 flex flex-wrap gap-2 items-center"><label>Cube connection <select aria-label="Cube connection method" disabled={connectionStatus!=='disconnected'} value={transport} onChange={e=>{const value=e.target.value as 'web'|'bridge';setTransport(value);try{localStorage.setItem('gan_connection_transport',value);}catch{/* preference is optional */}}} className="ml-2 bg-zinc-900 border border-zinc-700 rounded p-1 text-white"><option value="web">Direct Web Bluetooth</option><option value="bridge">Local bridge · any browser</option></select></label>{transport==='bridge' && <span>Start npm run bridge, then Connect Cube.</span>}</div>
 
+      <button onClick={downloadConnectionLog} className="self-start mx-4 my-1 text-xs text-zinc-400 underline">Download connection log</button>
       {connectionStatus==='connecting' && <p role="status" className="px-4 py-2 text-xs text-indigo-300">{hardwareState} Keep the cube awake and nearby.</p>}
       {connectionStatus==='disconnected' && connectionError && <p role="alert" className="px-4 py-2 text-xs text-amber-300">{connectionError}</p>}
       {connectionStatus==='connected' && <div role="status" className={`px-4 py-2 text-xs border-b ${hardwareIssue?'bg-amber-950/50 border-amber-800 text-amber-200':'bg-zinc-900 border-zinc-800 text-zinc-400'}`}>

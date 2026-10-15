@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GAN BLE connection lab</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#101216;color:#e9ecf2;font:16px/1.5 system-ui,sans-serif}main{max-width:1100px;margin:auto;padding:32px 24px}h1{font-size:30px;margin:0}h2{font-size:16px;margin:0 0 12px}p{color:#aeb7c6}button,input{font:inherit;border:1px solid #4a5364;border-radius:8px;padding:10px 14px;background:#222936;color:inherit}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}button.primary{background:#a3e2bf;color:#11281b;border-color:#a3e2bf}label{display:block;font-size:14px;color:#bbc4d3}input{width:min(100%,340px);margin:5px 0 12px;font-family:monospace}.controls{display:flex;gap:10px;flex-wrap:wrap}.panel{background:#181d25;border:1px solid #313a49;border-radius:12px;padding:20px;margin-top:20px}.status{border-left:4px solid #a3e2bf}#status{font-weight:600}#detail{margin:6px 0 0;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.metric{font:64px/1.2 ui-monospace,monospace;color:#a3e2bf}.small{font-size:13px}#moves{min-height:58px;font:22px/1.8 ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,monospace;max-height:380px;overflow:auto;margin:0}.heading{display:flex;align-items:center;justify-content:space-between;gap:12px}#facelets{letter-spacing:.2em}a{color:#a3e2bf}@media(max-width:650px){main{padding:20px 14px}.grid{grid-template-columns:1fr;gap:0}.metric{font-size:48px}}
+  </style>
+</head>
+<body><main>
+  <h1>GAN BLE connection lab</h1>
+  <p>Standalone connection and move readout · gan-web-bluetooth 3.0.2</p>
+  <p class="small">Close the trainer's cube connection and other cube apps first. This page connects only when you press Connect. No background scanning or reconnect loop.</p>
+  <section class="panel">
+    <label for="mac">Cube MAC address (optional if advertisements provide it)</label>
+    <input id="mac" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false" maxlength="17">
+    <div class="controls"><button id="connect" class="primary">Connect cube</button><button id="disconnect" disabled>Disconnect</button><button id="refresh" disabled>Request state & battery</button><button id="export">Download log</button></div>
+    <p class="small">Edge or Chrome required. The MAC is the cube's hardware address, not the browser's device ID. An entered address stays in this tab's memory only.</p>
+  </section>
+  <section class="panel status" aria-live="polite"><div id="status">Idle · no connection attempted</div><p id="detail">Turn Bluetooth on only when you are ready to test.</p></section>
+  <div class="grid">
+    <section class="panel"><h2>Last turn</h2><div id="last-move" class="metric">—</div><p id="move-info" class="small">Waiting for decoded MOVE events</p><div id="moves"></div></section>
+    <section class="panel"><h2>Cube readout</h2><p id="device">Device: —</p><p id="link">GATT: not selected</p><p id="battery">Battery: —</p><p id="hardware">Hardware / firmware: —</p><p id="count">Turns received: 0</p><pre id="facelets">No facelet snapshot</pre></section>
+  </div>
+  <section class="panel"><div class="heading"><h2>Connection & decoded event log</h2><button id="clear">Clear readout</button></div><p class="small">Shows unfiltered driver events, service UUIDs and failures. No solve logic or orientation remapping. Logs stay on this page until downloaded.</p><pre id="log" role="log" aria-label="Connection event log"></pre></section>
+  <p class="small">Reference: <a href="https://github.com/afedotov/gan-cube-sample" target="_blank" rel="noreferrer">GAN library maintainer's example</a>. Successful simulation tests do not establish physical cube compatibility.</p>
+</main><script type="module" src="/main.ts"></script></body></html>
