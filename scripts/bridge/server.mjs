@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 const {connectGanCube,now}=createRequire(import.meta.url)('gan-web-bluetooth');
 import { NativeTransport, nativeDevice } from './native-transport.mjs';
 import { initializeCubeConnection } from '../../src/utils/connectionHandshake.mjs';
+import { knownCubeMac } from '../../src/utils/knownCube.mjs';
 
 export function createBridge(transport,{port=2015}={}) {
   let devices=[],connection=null,adapter=null,subscription=null,lease=null,busy=false,lastSeen=0;
@@ -40,7 +41,7 @@ export function createBridge(transport,{port=2015}={}) {
       if(url.pathname==='/connect'){
         if(busy || lease){json(409,{error:'A bridge client already owns the cube.'});return;}
         const selected=devices.find(d=>d.id===data.deviceId);if(!selected)throw new Error('Scan and select a cube first.');
-        const mac=selected.mac??data.mac;
+        const mac=knownCubeMac(selected.name)??selected.mac??data.mac;
         if(!/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(mac??''))throw new Error('Cube did not advertise a usable MAC. Enter its actual MAC to continue.');
         busy=true;const cursor=sequence;
         try {

@@ -37,7 +37,7 @@ test('connection manager closes partial GATT links and refuses failed startup in
   const shim=`data:text/javascript;base64,${Buffer.from('export const connectGanCube=(provider)=>globalThis.__ganConnectionFixture(provider);').toString('base64')}`;
   const bridge=`data:text/javascript;base64,${Buffer.from('export const connectNativeBridge=()=>{throw new Error("not selected");};').toString('base64')}`;
   const guard=await sourceModule('utils/ganMoveGuard.ts'),gatt=await sourceModule('utils/gattDiscovery.ts');
-  const {ganBluetooth}= (await sourceModule('utils/ganBluetooth.ts',{'gan-web-bluetooth':shim,'./nativeBridge':bridge,'./ganMoveGuard':guard.url,'./gattDiscovery':gatt.url,'./connectionHandshake.mjs':new URL('../src/utils/connectionHandshake.mjs',import.meta.url).href})).exports;
+  const {ganBluetooth}= (await sourceModule('utils/ganBluetooth.ts',{'gan-web-bluetooth':shim,'./nativeBridge':bridge,'./ganMoveGuard':guard.url,'./gattDiscovery':gatt.url,'./connectionHandshake.mjs':new URL('../src/utils/connectionHandshake.mjs',import.meta.url).href,'./knownCube.mjs':new URL('../src/utils/knownCube.mjs',import.meta.url).href})).exports;
   const originalNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator'),originalStorage=globalThis.localStorage;
   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{bluetooth:{}}});globalThis.localStorage={getItem:()=> '01:02:03:04:05:06'};
   let disconnects=0;const device={id:'test',gatt:{connected:true,disconnect:()=>{device.gatt.connected=false;disconnects++;},getPrimaryServices:async()=>[],connect:async()=>device.gatt}};
@@ -45,6 +45,14 @@ test('connection manager closes partial GATT links and refuses failed startup in
   try {
     globalThis.__ganConnectionFixture=async provider=>{await provider(device,false);throw new Error('service discovery failed');};
     await assert.rejects(()=>ganBluetooth.connect({}),/service discovery failed/);assert.equal(disconnects,1);assert.equal(ganBluetooth.isConnected(),false);assert.equal(device.gatt.getPrimaryServices,originalDiscovery);
+    const {KNOWN_CUBE,knownCubeMac}=await import('../src/utils/knownCube.mjs');
+    assert.equal(knownCubeMac('another cube'),null);
+    globalThis.__ganConnectionFixture=async provider=>{
+      // A stale cached MAC must never override the owner's fixed address.
+      assert.equal(await provider({...device,name:KNOWN_CUBE.name},false),KNOWN_CUBE.mac);
+      throw new Error('Known address checked without advertisements');
+    };
+    await assert.rejects(()=>ganBluetooth.connect({onMacPrompt:()=>{throw new Error('Known cube must never prompt');}}),/Known address checked/);
     const events$=new Subject();let closed=false;
     globalThis.__ganConnectionFixture=async()=>({deviceName:'fixture',events$,sendCubeCommand:async()=>{throw new Error('startup write failed');},disconnect:async()=>{closed=true;}});
     await assert.rejects(()=>ganBluetooth.connect({}),/startup write failed/);assert.equal(closed,true);assert.equal(ganBluetooth.isConnected(),false);assert.equal(events$.observed,false);

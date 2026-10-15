@@ -1,5 +1,7 @@
 # Temporary GAN BLE connection lab
 
+The owner's GANic4_3730 MAC is now hardcoded in `src/utils/knownCube.mjs` and prefilled here. Selecting that exact device uses the fixed address before any cache, advertisement lookup or prompt. The bridge also uses this mapping. Other device names are not automatically assigned this cube's address. Hardware testing is on hold at the owner's request; no automatic connection or reconnection occurs.
+
 Run from the repository root:
 
 ```powershell
@@ -20,9 +22,13 @@ MAC input stays in memory and is omitted from explicit logs. Downloaded logs inc
 
 ## Native comparison
 
+Use one updated lab tab for testing. A Web Lock now prevents overlapping scans/connections between updated tabs at port 5174; another app or another origin is outside its scope. A manual cancel retains ownership until the pending browser setup settles. Close older lab pages before a physical test, since already-loaded versions do not acquire this lock.
+
 Run `npm run bridge`, select **Local bridge · native Bluetooth**, and explicitly press **Scan native Bluetooth**. Select the cube from the resulting list, then **Connect cube**. This uses the existing native transport client and decoder, bypassing browser Bluetooth. It normally detects the actual address without manual entry. The loopback server permits this test page's port 5174. No scan or connection happens on page load or transport selection. Native connections close on explicit disconnect; closing the page stops its heartbeat and the server releases the lease after its 15-second timeout.
 
 The direct trace distinguishes `gatt.connect BEGIN/RESOLVED/REJECTED` and `getPrimaryServices BEGIN/RESOLVED/REJECTED`, including actual connected flags and elapsed time. Methods are restored after setup. **Cancel connection** can close an already-open direct GATT link during pending discovery; a new attempt remains disabled until the outstanding browser operation settles. It cannot cancel the browser picker or an OS operation that ignores disconnection.
+
+Windows native service discovery now explicitly requests uncached attributes. Failed/cancelled native setup releases the partial client. Replaced clients' late callbacks are ignored. These changes improve lifecycle handling but do not prove that a particular Windows service-discovery failure is repaired.
 
 Build/type-check independently with `npm run build:ble`. Output is ignored `dist/ble-test/`; a subsequent main build clears `dist`, so rebuild the lab if production output is needed. Its dev command is independent of build output.
 

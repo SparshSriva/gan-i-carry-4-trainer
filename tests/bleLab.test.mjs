@@ -5,6 +5,23 @@ import ts from 'typescript';
 const source=await readFile(new URL('../tools/ble-test/traceGatt.ts',import.meta.url),'utf8');
 const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext}}).outputText;
 const {traceGatt}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const leaseSource=await readFile(new URL('../tools/ble-test/connectionLease.ts',import.meta.url),'utf8');
+const leaseCode=ts.transpileModule(leaseSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext}}).outputText;
+const {acquireConnectionLease}=await import(`data:text/javascript;base64,${Buffer.from(leaseCode).toString('base64')}`);
+
+test('lab rejects overlapping tab attempts and releases the lock after cleanup',async()=>{
+  const original=Object.getOwnPropertyDescriptor(globalThis,'navigator');let owned=false;
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:async(_name,_options,callback)=>{
+    if(owned)return callback(null);
+    owned=true;try{return await callback({name:'test-lock'});}finally{owned=false;}
+  }}}});
+  try{
+    const release=await acquireConnectionLease();
+    await assert.rejects(acquireConnectionLease(),/Another BLE lab tab/);assert.equal(owned,true);
+    release();await new Promise(resolve=>setImmediate(resolve));assert.equal(owned,false);
+    const next=await acquireConnectionLease();next();await new Promise(resolve=>setImmediate(resolve));assert.equal(owned,false);
+  }finally{if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
+});
 
 test('lab trace preserves call receiver, service arguments/results and original methods without extra BLE operations',async()=>{
   let connects=0,reads=0;const lines=[],services=[{uuid:'gen3-fixture'}];

@@ -1,5 +1,7 @@
 # GAN i Carry 4 BLE investigation
 
+**Current status: root cause unresolved; hardware testing on hold at the owner's request.** The fixed owner-supplied MAC for `GANic4_3730` is now configured in `src/utils/knownCube.mjs` and used by the trainer, lab and native bridge. Cache/advertisement lookup and manual prompts are bypassed for this cube. The observed failure is after a successful GATT connect and before service discovery completes. MAC configuration resolves repeated entry only; it is not represented as a fix for that failure. Do not initiate further scans, connects, resets or pairing changes without a new user instruction authorizing the hardware test.
+
 Reviewed October 14, 2026. No successful connection or packet capture from the user's cube exists yet. Bluetooth was disabled **after** the failed attempt; that does not explain the preceding failure.
 
 ## Evidence
@@ -55,6 +57,18 @@ Next-test evidence: advertised name, connected state, service UUIDs if reached, 
 The native bridge uses [Bleak's client API](https://bleak.readthedocs.io/en/stable/api/client.html) and the same decoder. It can isolate Web Bluetooth behavior but cannot repair an unknown firmware protocol mismatch by itself. A speculative firmware change or MAC brute force is not justified by the available evidence.
 
 ## Validation and remaining acceptance
+
+### Observed connect/discovery boundary and native comparison
+
+The subsequent user trace separates the calls: `gatt.connect()` resolved in 27 ms with both connected flags true; `getPrimaryServices()` then rejected after 8,323 ms following a disconnect. This establishes a connection/service-discovery failure, not a decoded-packet failure. The user has supplied the matching MAC; entering it repeatedly cannot fix this stage.
+
+A native five-second scan found no GAN advertisements. Its timestamps (04:43:37–42 UTC) overlapped a browser picker (04:43:33–46 UTC), so that result is not an isolated comparison. Windows read-only inspection confirmed a working Realtek BLE adapter with radio state ON. A single documented `FromBluetoothAddressAsync` probe returned no device reference and released its resources; no service UUIDs or hardware responses were obtained. This does not disprove the user's pairing observation or establish a hardware defect.
+
+The [GAN maintainer's native example](https://github.com/afedotov/gan-node-sample/blob/main/index.js) reads the advertisement MAC, subscribes to the decoder and uses the same request sequence. Its transport is webbluetooth; our transport remains Bleak, so the example is a behavioral cross-check, not validation of our native adapter. [Bleak's client documentation](https://bleak.readthedocs.io/en/stable/api/client.html) warns that scan/connection concurrency depends on adapter hardware and recommends passing a scanned BLEDevice instead of triggering another implicit scan.
+
+The lab now holds a Web Lock across a connection, or for the duration of a native scan, rejecting overlapping attempts in updated lab tabs on the same origin. This cannot exclude another app, another port, or a previously loaded lab version. The native worker continues using one asyncio loop and scanned BLEDevice objects; it now explicitly selects uncached Windows service discovery, checks session state, cleans failed/ cancelled partial clients, ignores obsolete-generation disconnect/notification callbacks, and reports operation/error type. These are lifecycle corrections and a documented cache policy, not a proven repair for the physical failure. [Bleak documents uncached service options](https://bleak.readthedocs.io/en/stable/api/args.html#winrt-backend-arguments) and [console MTA requirements](https://bleak.readthedocs.io/en/stable/troubleshooting.html#windows-bugs).
+
+43 JavaScript checks and three native lifecycle unit tests pass, with lab build/lint passing. Native tests use fake clients and access no hardware. Run them after bridge setup with `.runtime/ble/Scripts/python.exe -m unittest discover -s tests -p test_ble_worker.py` on Windows. A coordinated awake-cube test is still required; these checks do not establish reliable hardware operation.
 
 The new synthetic Gen3 test exercises actual service selection, allowed picker service, notification-before-write order, exact encrypted startup requests, overlapping-window encrypted facelets, move suppression before initial state, ordered R/U' events, battery, reset and disconnect through the real installed decoder/native adapter. Layouts come from source, not an i Carry 4 capture. Gen4 coverage remains.
 

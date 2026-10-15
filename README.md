@@ -15,6 +15,8 @@ Install Java 17+ first. The launcher downloads the pinned official TNoodle-WCA 1
 
 For isolated hardware debugging, run `npm run test:ble` and open **http://127.0.0.1:5174/**. The [temporary BLE lab](./tools/ble-test/README.md) shows raw moves, serials, timestamps, battery, facelets and downloadable logs. Direct mode uses the GAN library with transparent GATT timing logs and no retries; Local bridge uses native Bluetooth via `npm run bridge`. It does not load the trainer. See the [i Carry 4 research](./docs/ICARRY4_BLE_RESEARCH.md) for reported Gen3 support and verification limits.
 
+The owner's `GANic4_3730` has its fixed MAC configured in `src/utils/knownCube.mjs`. Both apps and the bridge use that mapping before advertisements, cached addresses or prompts. This removes repeat MAC entry; it does not repair the still-unresolved service-discovery disconnect. Further physical tests are on hold at the owner's request to conserve battery.
+
 1. Start with a solved cube and choose the matching up/front solving frame.
 2. Browse F2L / OLL / PLL sections, select preferred alternates, and add individual algorithms or the visible section to a training session. Choose balanced cycles or adaptive weighting, then start training.
 3. Follow the setup moves. If you make a mistake, undo the correction queue shown on screen.

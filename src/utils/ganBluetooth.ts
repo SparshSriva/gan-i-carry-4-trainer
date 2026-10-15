@@ -14,6 +14,7 @@ import { GanMoveGuard } from './ganMoveGuard';
 import { connectNativeBridge } from './nativeBridge';
 import { stabilizeGattDiscovery } from './gattDiscovery';
 import { initializeCubeConnection } from './connectionHandshake.mjs';
+import { knownCubeMac } from './knownCube.mjs';
 
 export interface BleHardwareInfo {
   hardwareName?: string;
@@ -83,6 +84,8 @@ class GanBluetoothManager {
         device.addEventListener?.('gattserverdisconnected',recordLinkDisconnect);
         if(device.gatt && !restoreDiscovery)restoreDiscovery=stabilizeGattDiscovery(device.gatt,progress);
       }
+      const fixedMac=knownCubeMac(device.name);
+      if(fixedMac){this.record('Using owner-configured address for this cube; advertisement lookup and MAC prompt skipped');return fixedMac;}
       this.record(isFallbackCall?'Advertisement MAC lookup exhausted; requesting address fallback':'Checking cached address before advertisement lookup');
       const storageKey = `gan_cube_mac_${device.id}`;
       let cachedMac:string|null=null;
