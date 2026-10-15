@@ -6,6 +6,8 @@ Reviewed October 14, 2026. No successful connection or packet capture from the u
 
 ## Evidence
 
+The owner's clarification is that CubeStation works on a **phone**, not that a custom laptop app previously received turns. See the [desktop implementation source comparison](./LAPTOP_BLE_IMPLEMENTATIONS.md) for native Windows C#/WinRT, Python/Bleak and Node.js implementations. The strongest newly identified functional difference is SharpTimer's targeted GAN service-query fallback after general enumeration fails. It is a candidate recovery design, not an established fix for this cube's failure.
+
 - [Twysty support](https://twysty.vercel.app/support) has a search-indexed version explicitly describing i Carry 4 as **Gen3**, with moves, facelets and battery, without gyro. Direct fetching also returned an older generic version. This is a reported implementation claim, not captured proof for every firmware revision.
 - [acubemy's FAQ](https://acubemy.com/faq) lists i Carry 4 (2026) separately from GAN i4. It does not publish the protocol implementation. Product number 4 cannot select a GAN protocol driver.
 - The installed MIT [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth) 3.0.2 has Gen2/3/4 drivers. Its documented Gen3 model is i Carry 2; its README does not explicitly establish i Carry 4 compatibility. It selects the driver from discovered service UUIDs.
