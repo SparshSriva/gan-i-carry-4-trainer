@@ -6,6 +6,8 @@ Reviewed October 14, 2026. No successful connection or packet capture from the u
 
 ## Evidence
 
+**Implemented follow-up:** the shared browser setup now substitutes targeted `getPrimaryService(uuid)` queries for unfiltered enumeration. The lab uses that same adapter and no longer re-enumerates all services after readiness. Native Bleak receives a supported-service filter plus uncached Windows settings; inspection of the installed backend confirms this selects `get_gatt_services_for_uuid_with_cache_mode_async`. The application reconnect/backoff loop was removed. Only an absent profile on a still-connected link permits another UUID query. Offline integration proves the real upstream driver reaches decoded Gen3 state without an unfiltered query; it does not prove the physical disconnect repaired. Earlier sections describing generic retries or broad discovery are historical. Hardware tests remain on hold.
+
 The owner's clarification is that CubeStation works on a **phone**, not that a custom laptop app previously received turns. See the [desktop implementation source comparison](./LAPTOP_BLE_IMPLEMENTATIONS.md) for native Windows C#/WinRT, Python/Bleak and Node.js implementations. The strongest newly identified functional difference is SharpTimer's targeted GAN service-query fallback after general enumeration fails. It is a candidate recovery design, not an established fix for this cube's failure.
 
 - [Twysty support](https://twysty.vercel.app/support) has a search-indexed version explicitly describing i Carry 4 as **Gen3**, with moves, facelets and battery, without gyro. Direct fetching also returned an older generic version. This is a reported implementation claim, not captured proof for every firmware revision.

@@ -1,7 +1,7 @@
 import { connectGanCube } from 'gan-web-bluetooth';
 import type { GanCubeConnection, GanCubeEvent } from 'gan-web-bluetooth';
 import type { Subscription } from 'rxjs';
-import { traceGatt } from './traceGatt';
+import { configureGanGatt } from '../../src/utils/gattDiscovery';
 import { acquireConnectionLease } from './connectionLease';
 import { scanBridge, connectNativeBridge } from '../../src/utils/nativeBridge';
 import { KNOWN_CUBE,knownCubeMac } from '../../src/utils/knownCube.mjs';
@@ -10,6 +10,7 @@ const element=(id:string)=>document.getElementById(id)!;
 const button=(id:string)=>element(id) as HTMLButtonElement;
 const mac=element('mac') as HTMLInputElement;
 mac.value=KNOWN_CUBE.mac;
+element('connection-build').textContent='Targeted GAN service discovery · fixed cube MAC · one connection attempt';
 const transport=element('transport') as HTMLSelectElement,bridgeDevices=element('bridge-devices') as HTMLSelectElement;
 let connection:GanCubeConnection|null=null,subscription:Subscription|null=null,device:BluetoothDevice|null=null;
 let busy=false,ready=false,cancelRequested=false,turns=0,lastSerial:number|null=null,verificationTimer:ReturnType<typeof setTimeout>|undefined;
@@ -65,7 +66,7 @@ button('connect').onclick=async()=>{
     releaseLease=await acquireConnectionLease();
     const conn=native?await connectNativeBridge(bridgeDevices.value,address||undefined):await connectGanCube(async(selected,fallback)=>{
       device=selected;
-      if(!fallback){selected.addEventListener('gattserverdisconnected',onLinkDisconnect);log(`Selected ${selected.name??'(unnamed)'}; GATT connected=${selected.gatt?.connected}; watchAdvertisements=${typeof selected.watchAdvertisements}`);element('device').textContent=`Device: ${selected.name??'(unnamed)'}`;if(selected.gatt)restoreTrace=traceGatt(selected.gatt,log);}
+      if(!fallback){selected.addEventListener('gattserverdisconnected',onLinkDisconnect);log(`Selected ${selected.name??'(unnamed)'}; GATT connected=${selected.gatt?.connected}; watchAdvertisements=${typeof selected.watchAdvertisements}`);element('device').textContent=`Device: ${selected.name??'(unnamed)'}`;if(selected.gatt)restoreTrace=configureGanGatt(selected.gatt,log);}
       const fixedMac=knownCubeMac(selected.name);
       if(fixedMac){log('Using hardcoded owner-provided MAC for configured cube (value omitted from log)');status('Connecting GATT and discovering services','Configured cube address loaded; no advertisement lookup or address prompt.');return fixedMac;}
       if(address){log('Using explicitly entered MAC (value omitted from log)');status('Connecting GATT and discovering services','MAC supplied; the upstream library now owns service selection and notification setup.');return address;}
@@ -80,12 +81,8 @@ button('connect').onclick=async()=>{
     status('Connected · waiting for decoded state','Requesting hardware, facelets and battery in maintainer example order.');
     verificationTimer=setTimeout(()=>{if(!ready&&connection){log('No valid decoded snapshot within 12 seconds');status('GATT open · decoded state missing','Possible MAC/protocol/notification failure. Download the log. Disconnect when finished.');}},12000);
     await requestState();
-    // Observe actual services only after the library has finished initialization.
-    try{
-      const selected=device as BluetoothDevice|null;
-      const services=await selected?.gatt?.getPrimaryServices();
-      for(const service of services??[])log(`Service ${service.uuid}`);
-    }catch(error){log(`Diagnostic service enumeration failed: ${errorText(error)}`);}
+    // Discovery already logged the selected UUID. Do not repeat an unfiltered
+    // service enumeration after the connection has become usable.
   }catch(error){
     log(`Connection failed: ${errorText(error)}`);
     await stop();
@@ -109,8 +106,9 @@ button('export').onclick=()=>{
 const poll=setInterval(()=>{element('link').textContent=transport.value==='bridge'?`Native link: ${connection?'connected through bridge':'not connected'}`:`GATT: ${device?device.gatt?.connected?'connected':'disconnected':'not selected'}`;controls();},250);
 window.addEventListener('pagehide',()=>{clearInterval(poll);if(device?.gatt?.connected)device.gatt.disconnect();});
 log(`Lab loaded. Web Bluetooth ${navigator.bluetooth?'available':'unavailable'}. No connection attempted.`);
+log('Connection build: targeted-services-v1; fixed cube MAC; no unfiltered discovery or automatic reconnects.');
 log(`Browser: ${navigator.userAgent}`);
-transport.onchange=()=>{element('native-controls').hidden=transport.value!=='bridge';status('Transport selected',transport.value==='bridge'?'Press Scan native Bluetooth when ready. This bypasses browser Bluetooth; the local bridge must be running.':'Direct upstream Web Bluetooth with connect/service timing observations; no retries.');};
+transport.onchange=()=>{element('native-controls').hidden=transport.value!=='bridge';status('Transport selected',transport.value==='bridge'?'Press Scan native Bluetooth when ready. This bypasses browser Bluetooth; the local bridge must be running.':'Queries supported GAN service UUIDs directly; no unfiltered enumeration or automatic reconnects.');};
 button('scan').onclick=async()=>{
   if(busy||connection)return;busy=true;controls();log('User requested native scan');status('Scanning native Bluetooth','Scanning for 5 seconds through the local bridge…');
   try{

@@ -20,17 +20,17 @@ const catalogUrl=`data:text/javascript;base64,${Buffer.from('export default '+JS
 const databaseModule=await sourceModule('data/algDatabase.ts',{'./algorithmCatalog.json':catalogUrl});
 const { ALL_CASES }=databaseModule.exports;
 const puzzle = await puzzles['3x3x3'].kpuzzle();
-const {stabilizeGattDiscovery}=(await sourceModule('utils/gattDiscovery.ts')).exports;
-test('GATT discovery reconnects the selected device after a transient disconnect',async()=>{
-  let reads=0,connects=0;const stages=[];
-  const gatt={connected:true,connect:async()=>{connects++;gatt.connected=true;return gatt;},disconnect:()=>{gatt.connected=false;},getPrimaryServices:async()=>{if(++reads===1)throw new Error('GATT Server is disconnected');return [{uuid:'00000010-0000-fff7-fff6-fff5fff4fff0'}];}};
-  const original=gatt.getPrimaryServices;const restore=stabilizeGattDiscovery(gatt,s=>stages.push(s),async()=>{});
-  assert.deepEqual(await gatt.getPrimaryServices(),[{uuid:'00000010-0000-fff7-fff6-fff5fff4fff0'}]);assert.equal(connects,1);assert.equal(reads,2);assert.ok(stages.some(s=>/2\/3/.test(s)));restore();assert.equal(gatt.getPrimaryServices,original);
+const {configureGanGatt,GAN_SERVICES}=(await sourceModule('utils/gattDiscovery.ts')).exports;
+test('GATT discovery queries a known GAN service without unfiltered enumeration or reconnects',async()=>{
+  let connects=0;const stages=[],queries=[];
+  const gatt={connected:false,connect:async()=>{connects++;gatt.connected=true;return gatt;},getPrimaryServices:async()=>{throw new Error('Unfiltered discovery must not run');},getPrimaryService:async uuid=>{queries.push(uuid);return {uuid};}};
+  const original=gatt.getPrimaryServices,restore=configureGanGatt(gatt,s=>stages.push(s));
+  await gatt.connect();assert.deepEqual(await gatt.getPrimaryServices(),[{uuid:GAN_SERVICES[0].uuid}]);assert.equal(connects,1);assert.deepEqual(queries,[GAN_SERVICES[0].uuid]);assert.ok(stages.some(s=>/Gen3 service verified/.test(s)));restore();assert.equal(gatt.getPrimaryServices,original);
 });
-test('GATT service discovery retries are bounded and permission failures are not retried',async()=>{
+test('targeted discovery propagates network and permission failures without retrying',async()=>{
   for(const name of ['NetworkError','SecurityError']){
-    let reads=0;const gatt={connected:true,connect:async()=>gatt,disconnect:()=>{},getPrimaryServices:async()=>{reads++;const error=new Error('GATT failure');error.name=name;throw error;}};
-    const restore=stabilizeGattDiscovery(gatt,()=>{},async()=>{});await assert.rejects(()=>gatt.getPrimaryServices());assert.equal(reads,name==='NetworkError'?3:1);restore();
+    let reads=0;const gatt={connected:true,connect:async()=>gatt,getPrimaryServices:async()=>[],getPrimaryService:async()=>{reads++;const error=new Error('GATT failure');error.name=name;throw error;}};
+    const restore=configureGanGatt(gatt);await assert.rejects(()=>gatt.getPrimaryServices());assert.equal(reads,1);restore();
   }
 });
 test('connection manager closes partial GATT links and refuses failed startup instead of reporting ready',async()=>{

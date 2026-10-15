@@ -7,6 +7,12 @@ if sys.platform == 'win32':
     sys.coinit_flags = 0  # Console WinRT callbacks require MTA, per Bleak guidance.
 from bleak import BleakClient, BleakScanner
 
+GAN_SERVICES = (
+    '8653000a-43e6-47b7-9cb0-5fc21d4ae340',
+    '00000010-0000-fff7-fff6-fff5fff4fff0',
+    '6e400001-b5a3-f393-e0a9-e50e24dc4179',
+)
+
 def emit(value):
     print(json.dumps(value), flush=True)
 
@@ -19,7 +25,9 @@ def advertised_mac(data):
 async def open_client(device, disconnected_callback):
     # Use a freshly scanned BLEDevice, not a string that triggers an implicit
     # second scan. Read the attribute database from the device on Windows.
-    options = {'winrt': {'use_cached_services': False}} if sys.platform == 'win32' else {}
+    options = {'services': GAN_SERVICES}
+    if sys.platform == 'win32':
+        options['winrt'] = {'use_cached_services': False}
     candidate = BleakClient(device, disconnected_callback=disconnected_callback, **options)
     try:
         await asyncio.wait_for(candidate.connect(), timeout=25)

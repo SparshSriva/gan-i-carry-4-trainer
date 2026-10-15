@@ -1,38 +1,46 @@
-/** Bounded exponential reconnects, as in Chromium's Automatic Reconnect sample. */
-export function stabilizeGattDiscovery(
+export const GAN_SERVICES=[
+  {generation:3,uuid:'8653000a-43e6-47b7-9cb0-5fc21d4ae340'},
+  {generation:4,uuid:'00000010-0000-fff7-fff6-fff5fff4fff0'},
+  {generation:2,uuid:'6e400001-b5a3-f393-e0a9-e50e24dc4179'},
+] as const;
+
+/** Query known GAN services directly; one explicit connection, no retries.
+ * Prefer the reported i Carry family profile, but select only the actual UUID.
+ * The maintained GAN library still owns characteristics and packet decoding.
+ */
+export function configureGanGatt(
   gatt:BluetoothRemoteGATTServer,
   progress:(message:string)=>void=()=>{},
-  delay:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
 ):()=>void {
-  const original=gatt.getPrimaryServices,connect=gatt.connect;
-  async function attempt<T>(operation:()=>Promise<T>):Promise<T> {
-    for(let attempt=0;attempt<3;attempt++){
-      try {
-        if(attempt){
-          const wait=2000*2**(attempt-1);
-          progress(`Retrying GATT setup (${attempt+1}/3) in ${wait/1000}s…`);
-          if(gatt.connected)gatt.disconnect();await delay(wait);
-        }
-        return await operation();
+  const discover=gatt.getPrimaryServices,connect=gatt.connect;
+  gatt.connect=async()=>{
+    const start=performance.now();progress(`gatt.connect BEGIN connected=${gatt.connected}`);
+    try{
+      const server=await connect.call(gatt);
+      progress(`gatt.connect RESOLVED after ${Math.round(performance.now()-start)}ms connected=${server.connected}`);
+      return server;
+    }catch(error){progress(`gatt.connect REJECTED: ${describe(error)}`);throw error;}
+  };
+  gatt.getPrimaryServices=async service=>{
+    if(service!==undefined)return discover.call(gatt,service);
+    if(!gatt.connected)throw new Error('Cube GATT link closed before targeted service discovery.');
+    for(const candidate of GAN_SERVICES){
+      const start=performance.now();
+      progress(`Querying GAN Gen${candidate.generation} service ${candidate.uuid} (connected=${gatt.connected})…`);
+      try{
+        const found=await gatt.getPrimaryService(candidate.uuid);
+        if(!gatt.connected)throw new Error('Cube disconnected while returning its GAN service.');
+        if(found.uuid.toLowerCase()!==candidate.uuid)throw new Error('Cube transport returned a different service UUID than requested.');
+        progress(`GAN Gen${candidate.generation} service verified in ${Math.round(performance.now()-start)}ms; setting up notifications…`);
+        return [found];
       }catch(error){
-        const e=error as {name?:string;message?:string};
-        progress(`GATT attempt ${attempt+1}/3 failed (connected=${gatt.connected}): ${e.name??'Error'}: ${e.message??'Unknown failure'}`);
-        const transient=e.name==='NetworkError' || /disconnected|GATT|connection/i.test(e.message??'');
-        if(!transient || e.name==='SecurityError' || e.name==='NotAllowedError' || attempt===2)throw error;
+        progress(`GAN Gen${candidate.generation} service query failed after ${Math.round(performance.now()-start)}ms (connected=${gatt.connected}): ${describe(error)}`);
+        // Only absence permits querying another profile on the same live link.
+        if(!gatt.connected || (error as {name?:string}).name!=='NotFoundError')throw error;
       }
     }
-    throw new Error('Bluetooth GATT setup failed.');
-  }
-  gatt.connect=()=>attempt(()=>{progress('Connecting to selected cube GATT server…');return connect.call(gatt);});
-  gatt.getPrimaryServices=service=>attempt(async()=>{
-    if(!gatt.connected)await connect.call(gatt);
-    progress(`Reading cube Bluetooth services (connected=${gatt.connected})…`);
-    const services=await original.call(gatt,service);
-    progress(`Discovered services: ${services.map(s=>s.uuid).join(', ') || 'none'}`);
-    const supported=['6e400001-b5a3-f393-e0a9-e50e24dc4179','8653000a-43e6-47b7-9cb0-5fc21d4ae340','00000010-0000-fff7-fff6-fff5fff4fff0'];
-    const generation=services.map(s=>supported.indexOf(s.uuid.toLowerCase())).find(i=>i>=0);
-    if(generation!==undefined)progress(`GAN Gen${generation+2} service found; setting up notifications…`);
-    return services;
-  });
-  return()=>{gatt.getPrimaryServices=original;gatt.connect=connect;};
+    throw new Error('No supported GAN Gen2, Gen3 or Gen4 service was found on the connected cube.');
+  };
+  return()=>{gatt.getPrimaryServices=discover;gatt.connect=connect;};
 }
+function describe(error:unknown){return error instanceof Error?`${error.name}: ${error.message}`:String(error);}

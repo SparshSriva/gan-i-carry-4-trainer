@@ -10,10 +10,11 @@
 <body><main>
   <h1>GAN BLE connection lab</h1>
   <p>Standalone connection and move readout · gan-web-bluetooth 3.0.2</p>
+  <p id="connection-build" class="small">Loading connection build…</p>
   <p class="small">Close the trainer's cube connection and other cube apps first. This page connects only when you press Connect. No background scanning or reconnect loop.</p>
   <section class="panel">
     <label for="transport">Connection method</label>
-    <select id="transport" style="font:inherit;padding:10px;margin:6px 0 14px;background:#222936;color:inherit;border-radius:8px"><option value="web">Direct Web Bluetooth · traced reference path</option><option value="bridge">Local bridge · native Bluetooth</option></select>
+    <select id="transport" style="font:inherit;padding:10px;margin:6px 0 14px;background:#222936;color:inherit;border-radius:8px"><option value="web">Direct Web Bluetooth · targeted GAN services</option><option value="bridge">Local bridge · native Bluetooth</option></select>
     <div id="native-controls" hidden><button id="scan">Scan native Bluetooth</button> <select id="bridge-devices" aria-label="Native cube" style="font:inherit;padding:10px;background:#222936;color:inherit"><option value="">Select a cube</option></select><p class="small">Start npm run bridge first. Scans only when you press Scan. Bypasses the browser's Bluetooth stack.</p></div>
     <label for="mac">Cube MAC address (optional if advertisements provide it)</label>
     <p class="small">GANic4_3730 is configured with your fixed address. Its connection skips MAC lookup and prompts.</p>

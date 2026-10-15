@@ -12,7 +12,7 @@ import { connectGanCube, GanCubeConnection, GanCubeEvent } from 'gan-web-bluetoo
 import { Subscription } from 'rxjs';
 import { GanMoveGuard } from './ganMoveGuard';
 import { connectNativeBridge } from './nativeBridge';
-import { stabilizeGattDiscovery } from './gattDiscovery';
+import { configureGanGatt } from './gattDiscovery';
 import { initializeCubeConnection } from './connectionHandshake.mjs';
 import { knownCubeMac } from './knownCube.mjs';
 
@@ -82,7 +82,7 @@ class GanBluetoothManager {
       if(!isFallbackCall){
         this.record(`Selected device: ${device.name??'(unnamed)'}`);
         device.addEventListener?.('gattserverdisconnected',recordLinkDisconnect);
-        if(device.gatt && !restoreDiscovery)restoreDiscovery=stabilizeGattDiscovery(device.gatt,progress);
+        if(device.gatt && !restoreDiscovery)restoreDiscovery=configureGanGatt(device.gatt,progress);
       }
       const fixedMac=knownCubeMac(device.name);
       if(fixedMac){this.record('Using owner-configured address for this cube; advertisement lookup and MAC prompt skipped');return fixedMac;}

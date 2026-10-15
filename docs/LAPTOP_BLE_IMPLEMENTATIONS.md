@@ -52,12 +52,14 @@ The project documents native BLE and a desktop UI. Its published roadmap identif
 
 ## Comparison with this app
 
+Implementation update: this comparison led to a concrete change. Browser setup now queries the known GAN service UUIDs directly from the start, rather than first triggering the unfiltered query that fails in the user's trace. The native worker uses Bleak's supported-service filter with uncached Windows discovery. The decoder remains selected from actual returned services. No GPL implementation code was copied. The prior broad-discovery description in the original comparison is retained as the problem that motivated this change.
+
 | Stage | Desktop references | Current app |
 | --- | --- | --- |
 | Native device discovery | Scanned device/address retained | Bleak worker retains scanned BLEDevice |
 | Fixed cube address | Native address or manufacturer data | Owner's exact address pinned for GANic4_3730 |
 | Windows async lifecycle | Native WinRT or Bleak console MTA | Bleak single event loop, explicit MTA setting |
-| Attribute discovery | Native uncached queries; SharpTimer also queries individual GAN UUIDs | Browser: broad service enumeration; native: Bleak uncached broad enumeration |
+| Attribute discovery | Native uncached queries; SharpTimer also queries individual GAN UUIDs | Browser: direct UUID queries; native: Bleak filtered, uncached discovery |
 | Driver selection | Characteristic/service UUIDs | Maintained decoder selected by actual service UUID |
 | Notifications and startup | Enable notifications, then initial state requests | Same order, plus decoded-state readiness gate |
 | Physical i Carry 4 validation | Not established by reviewed desktop sources | Still not established |

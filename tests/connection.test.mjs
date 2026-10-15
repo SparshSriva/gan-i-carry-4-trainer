@@ -3,10 +3,50 @@ import assert from 'node:assert/strict';
 import { Subject } from 'rxjs';
 import { encryptedFixture, solvedPacket, gen3SolvedPacket } from './ganFixtures.mjs';
 import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
 import { nativeDevice } from '../scripts/bridge/native-transport.mjs';
 import { initializeCubeConnection } from '../src/utils/connectionHandshake.mjs';
 const {connectGanCube}=createRequire(import.meta.url)('gan-web-bluetooth');
 const solved='UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB';
+const discoverySource=await readFile(new URL('../src/utils/gattDiscovery.ts',import.meta.url),'utf8');
+const discoveryCode=ts.transpileModule(discoverySource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext}}).outputText;
+const {configureGanGatt}=await import(`data:text/javascript;base64,${Buffer.from(discoveryCode).toString('base64')}`);
+
+test('upstream browser bootstrap reaches a real decoded Gen3 snapshot using only targeted service discovery',async()=>{
+  const uuid='8653000a-43e6-47b7-9cb0-5fc21d4ae340',state=new EventTarget(),command=new EventTarget(),queries=[];
+  let notifications=false,connects=0,writes=0;
+  state.startNotifications=async()=>{notifications=true;return state;};state.stopNotifications=async()=>{};
+  command.writeValue=async bytes=>{
+    assert.equal(notifications,true);writes++;
+    const facelets=Buffer.alloc(16);facelets.set([0x68,1]);
+    if(Buffer.from(bytes).toString('hex')===encryptedFixture(facelets)){
+      const data=Buffer.from(encryptedFixture(gen3SolvedPacket()),'hex');
+      state.value=new DataView(Uint8Array.from(data).buffer);
+      state.dispatchEvent(new Event('characteristicvaluechanged'));
+    }
+  };
+  const service={uuid,getCharacteristic:async requested=>{
+    if(requested==='8653000b-43e6-47b7-9cb0-5fc21d4ae340')return state;
+    assert.equal(requested,'8653000c-43e6-47b7-9cb0-5fc21d4ae340');return command;
+  }};
+  const device=new EventTarget();device.id='browser-fixture';device.name='GAN browser fixture';
+  const gatt={connected:false,connect:async()=>{connects++;gatt.connected=true;return gatt;},disconnect:()=>{gatt.connected=false;},
+    getPrimaryServices:async()=>{throw new Error('Unfiltered discovery must never run');},
+    getPrimaryService:async requested=>{queries.push(requested);assert.equal(requested,uuid);return service;}};
+  device.gatt=gatt;
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{bluetooth:{requestDevice:async()=>device}}});
+  let restore,conn;
+  try{
+    conn=await connectGanCube(async selected=>{restore=configureGanGatt(selected.gatt);return '01:02:03:04:05:06';});
+    assert.equal(await initializeCubeConnection(conn,()=>{},100),solved);
+    assert.deepEqual(queries,[uuid]);assert.equal(connects,1);assert.equal(writes,3);
+  }finally{
+    await conn?.disconnect();restore?.();
+    if(previous)Object.defineProperty(globalThis,'navigator',previous);else delete globalThis.navigator;
+  }
+});
 
 test('Gen3 service selects the real driver, subscribes before exact startup writes, and decodes state/moves/battery',async()=>{
   const service='8653000a-43e6-47b7-9cb0-5fc21d4ae340',write='8653000c-43e6-47b7-9cb0-5fc21d4ae340',notify='8653000b-43e6-47b7-9cb0-5fc21d4ae340';

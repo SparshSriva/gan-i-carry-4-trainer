@@ -25,6 +25,11 @@ class NativeLifecycleTests(unittest.IsolatedAsyncioTestCase):
             client = await worker.open_client(device, callback)
             self.assertIs(client.selected, device)
             self.assertEqual(client.options['winrt'], {'use_cached_services': False})
+            self.assertEqual(set(client.options['services']), {
+                '8653000a-43e6-47b7-9cb0-5fc21d4ae340',
+                '00000010-0000-fff7-fff6-fff5fff4fff0',
+                '6e400001-b5a3-f393-e0a9-e50e24dc4179',
+            })
             self.assertIs(client.options['disconnected_callback'], callback)
 
     async def test_failed_or_closed_connection_is_cleaned_up(self):

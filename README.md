@@ -13,7 +13,7 @@ Install Java 17+ first. The launcher downloads the pinned official TNoodle-WCA 1
 
 ## Practice
 
-For isolated hardware debugging, run `npm run test:ble` and open **http://127.0.0.1:5174/**. The [temporary BLE lab](./tools/ble-test/README.md) shows raw moves, serials, timestamps, battery, facelets and downloadable logs. Direct mode uses the GAN library with transparent GATT timing logs and no retries; Local bridge uses native Bluetooth via `npm run bridge`. It does not load the trainer. See the [i Carry 4 research](./docs/ICARRY4_BLE_RESEARCH.md) for reported Gen3 support and verification limits.
+For isolated hardware debugging, run `npm run test:ble` and open **http://127.0.0.1:5174/**. The [temporary BLE lab](./tools/ble-test/README.md) shows raw moves, serials, timestamps, battery, facelets and downloadable logs. Direct mode queries supported GAN service UUIDs individually and retains the maintained GAN decoder; Local bridge uses filtered native Bluetooth via `npm run bridge`. There are no application reconnect loops. The current lab displays **Targeted GAN service discovery**; old tabs retain their loaded code until refreshed. See the [i Carry 4 research](./docs/ICARRY4_BLE_RESEARCH.md) for verification limits.
 
 The owner's `GANic4_3730` has its fixed MAC configured in `src/utils/knownCube.mjs`. Both apps and the bridge use that mapping before advertisements, cached addresses or prompts. This removes repeat MAC entry; it does not repair the still-unresolved service-discovery disconnect. Further physical tests are on hold at the owner's request to conserve battery.
 
