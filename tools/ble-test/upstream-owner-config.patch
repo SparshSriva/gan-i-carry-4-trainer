@@ -1,0 +1,72 @@
+diff --git a/index.html b/index.html
+index 3c2f2a5..19e9d34 100644
+--- a/index.html
++++ b/index.html
+@@ -26,6 +26,8 @@
+ 
+     <div class="info">
+ 
++      <p id="connection-status" role="status">Configured sample: fixed MAC for GANic4_3730; upstream Bluetooth library unchanged. No connection attempted.</p>
++
+       <label for="deviceName">Device Name</label>
+       <input id="deviceName" type="text" readonly value="- n/a -">
+ 
+@@ -68,4 +70,4 @@
+ 
+ </body>
+ 
+-</html>
+\ No newline at end of file
++</html>
+diff --git a/src/index.ts b/src/index.ts
+index 424045b..3c8917b 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -143,6 +143,9 @@ function handleCubeEvent(event: GanCubeEvent) {
+ }
+ 
+ const customMacAddressProvider: MacAddressProvider = async (device, isFallbackCall): Promise<string | null> => {
++  if (device.name === 'GANic4_3730') {
++    return '0C:3D:5E:A9:37:30';
++  }
+   if (isFallbackCall) {
+     return prompt('Unable do determine cube MAC address!\nPlease enter MAC address manually:');
+   } else {
+@@ -161,18 +164,37 @@ $('#reset-gyro').on('click', async () => {
+ });
+ 
+ $('#connect').on('click', async () => {
++  $('#connect').prop('disabled', true);
++  let stage = 'Connecting through upstream gan-web-bluetooth';
++  try {
+   if (conn) {
+     conn.disconnect();
+     conn = null;
++    $('#connection-status').text('Disconnected');
++    $('#connect').html('Connect');
+   } else {
++    $('#connection-status').text(stage);
+     conn = await connectGanCube(customMacAddressProvider);
+     conn.events$.subscribe(handleCubeEvent);
++    stage = 'Requesting hardware information';
+     await conn.sendCubeCommand({ type: "REQUEST_HARDWARE" });
++    stage = 'Requesting cube state';
+     await conn.sendCubeCommand({ type: "REQUEST_FACELETS" });
++    stage = 'Requesting battery';
+     await conn.sendCubeCommand({ type: "REQUEST_BATTERY" });
+     $('#deviceName').val(conn.deviceName);
+     $('#deviceMAC').val(conn.deviceMAC);
+     $('#connect').html('Disconnect');
++    $('#connection-status').text('GAN initialization requests sent');
++  }
++  } catch (error) {
++    conn?.disconnect();
++    conn = null;
++    $('#connect').html('Connect');
++    $('#connection-status').text(`${stage}: ${error instanceof Error ? error.message : String(error)}`);
++    console.error(stage, error);
++  } finally {
++    $('#connect').prop('disabled', false);
+   }
+ });
+ 

@@ -6,6 +6,8 @@ An unchanged checkout of `afedotov/gan-cube-sample` is now available alongside t
 
 The fixed owner-supplied MAC for `GANic4_3730` remains configured in `src/utils/knownCube.mjs` for the trainer, custom lab and native bridge. It resolves repeated entry only. Those custom paths must not be described as the unchanged upstream sample. Further hardware testing should be a deliberate user-started attempt, without concurrent scans or competing connections.
 
+**Edge baseline result:** the owner's console screenshot shows a suppressed MAC prompt and missing-MAC rejection, plus separate service-discovery disconnections. Thus the upstream sample also encountered the service-discovery failure; the prompt failure does not explain all attempts. A subsequent, explicitly configured sample at port 5175 adds only the known-name MAC provider, inline error reporting and a disabled Connect button while setup is pending. The library and its GATT calls remain unchanged. This checkout is now modified and must be called the configured sample. The exact changes are preserved in `tools/ble-test/upstream-owner-config.patch`; apply with `git apply` from the upstream checkout at the pinned commit. Its build passed; no new physical connection was initiated to verify these changes.
+
 Reviewed October 14, 2026. No successful connection or packet capture from the user's cube exists yet. Bluetooth was disabled **after** the failed attempt; that does not explain the preceding failure.
 
 ## Evidence
