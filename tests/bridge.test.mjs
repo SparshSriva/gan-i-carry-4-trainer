@@ -35,7 +35,7 @@ test('bridge handler verifies encrypted initialization, owner isolation and comm
   try {
     assert.equal((await request('/scan',{},null,{origin:'https://unrelated.example'})).status,403);
     assert.equal((await request('/scan',{},null,{},false)).status,403);
-    const scan=await (await request('/scan',{})).json();assert.equal(scan.devices[0].mac,'01:02:03:04:05:06');
+    const scan=await (await request('/scan',{},null,{origin:'http://127.0.0.1:5174'})).json();assert.equal(scan.devices[0].mac,'01:02:03:04:05:06');
     assert.equal((await request('/connect',{deviceId:'unknown'})).status,500);
     const conn=await (await request('/connect',{deviceId:'cube'})).json();assert.ok(conn.lease);assert.equal(conn.deviceName,'GAN test');
     assert.equal((await request('/connect',{deviceId:'cube'})).status,409);

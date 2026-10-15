@@ -6,7 +6,7 @@
   "scripts": {
     "test:ble": "vite --config tools/ble-test/vite.config.mjs",
     "build:ble": "tsc -p tools/ble-test/tsconfig.json && vite build --config tools/ble-test/vite.config.mjs",
-    "test": "node --test tests/core.test.mjs tests/connection.test.mjs tests/bridge.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/connection.test.mjs tests/bridge.test.mjs tests/bleLab.test.mjs",
     "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

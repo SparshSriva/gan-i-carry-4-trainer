@@ -1,20 +1,25 @@
 import { connectGanCube } from 'gan-web-bluetooth';
 import type { GanCubeConnection, GanCubeEvent } from 'gan-web-bluetooth';
 import type { Subscription } from 'rxjs';
+import { traceGatt } from './traceGatt';
+import { scanBridge, connectNativeBridge } from '../../src/utils/nativeBridge';
 
 const element=(id:string)=>document.getElementById(id)!;
 const button=(id:string)=>element(id) as HTMLButtonElement;
 const mac=element('mac') as HTMLInputElement;
+const transport=element('transport') as HTMLSelectElement,bridgeDevices=element('bridge-devices') as HTMLSelectElement;
 let connection:GanCubeConnection|null=null,subscription:Subscription|null=null,device:BluetoothDevice|null=null;
-let busy=false,ready=false,turns=0,lastSerial:number|null=null,verificationTimer:ReturnType<typeof setTimeout>|undefined;
+let busy=false,ready=false,cancelRequested=false,turns=0,lastSerial:number|null=null,verificationTimer:ReturnType<typeof setTimeout>|undefined;
 let lines:string[]=[],moves:string[]=[];
+let restoreTrace:(()=>void)|undefined;
+function restoreGatt(){restoreTrace?.();restoreTrace=undefined;}
 const started=performance.now();
 function log(message:string){
   lines.push(`${new Date().toISOString()} +${Math.round(performance.now()-started)}ms ${message}`);
   lines=lines.slice(-1000);element('log').textContent=lines.join('\n');element('log').scrollTop=element('log').scrollHeight;
 }
 function status(title:string,detail:string){element('status').textContent=title;element('detail').textContent=detail;}
-function controls(){button('connect').disabled=busy||!!connection;button('disconnect').disabled=busy||!connection;button('refresh').disabled=busy||!connection;mac.disabled=busy||!!connection;}
+function controls(){button('connect').disabled=busy||!!connection;button('disconnect').disabled=!connection&&!device?.gatt?.connected;button('disconnect').textContent=busy?'Cancel connection':'Disconnect';button('refresh').disabled=busy||!connection;mac.disabled=busy||!!connection;transport.disabled=busy||!!connection;bridgeDevices.disabled=busy||!!connection;button('scan').disabled=busy||!!connection;}
 function errorText(error:unknown){return error instanceof Error?`${error.name}: ${error.message}`:String(error);}
 function cleanup(){clearTimeout(verificationTimer);subscription?.unsubscribe();subscription=null;connection=null;ready=false;controls();}
 function onLinkDisconnect(){log('GATT disconnected event');status('Disconnected','The physical BLE link closed. Download the log before another attempt.');}
@@ -42,22 +47,27 @@ async function requestState(){
 }
 button('connect').onclick=async()=>{
   if(busy||connection)return;
-  if(!navigator.bluetooth){status('Web Bluetooth unavailable','Open this test page in Microsoft Edge or Google Chrome.');return;}
+  const native=transport.value==='bridge';
+  cancelRequested=false;
+  if(!native&&!navigator.bluetooth){status('Web Bluetooth unavailable','Use Local bridge or open this test page in Microsoft Edge or Google Chrome.');return;}
+  if(native&&!bridgeDevices.value){status('Select a native device','Press Scan native Bluetooth, then select your cube.');return;}
   const address=mac.value.trim().toUpperCase();
   if(address&&!/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(address)){status('Invalid MAC format','Use six hexadecimal pairs separated by colons.');return;}
-  busy=true;ready=false;controls();log('Connect pressed. Using upstream connectGanCube directly; no app GATT overrides or retries.');status('Choose the cube','Waiting for the browser picker and MAC resolution.');
+  busy=true;ready=false;controls();log(`Connect pressed. Transport=${native?'native bridge':'Web Bluetooth'}; no automatic retries.`);status(native?'Connecting with native Windows Bluetooth':'Choose the cube',native?'The bridge owns service discovery and GAN decoding.':'Waiting for the browser picker and MAC resolution.');
+  restoreGatt();
   device?.removeEventListener('gattserverdisconnected',onLinkDisconnect);device=null;
   try{
-    const conn=await connectGanCube(async(selected,fallback)=>{
+    const conn=native?await connectNativeBridge(bridgeDevices.value,address||undefined):await connectGanCube(async(selected,fallback)=>{
       device=selected;
-      if(!fallback){selected.addEventListener('gattserverdisconnected',onLinkDisconnect);log(`Selected ${selected.name??'(unnamed)'}; GATT connected=${selected.gatt?.connected}`);element('device').textContent=`Device: ${selected.name??'(unnamed)'}`;}
+      if(!fallback){selected.addEventListener('gattserverdisconnected',onLinkDisconnect);log(`Selected ${selected.name??'(unnamed)'}; GATT connected=${selected.gatt?.connected}; watchAdvertisements=${typeof selected.watchAdvertisements}`);element('device').textContent=`Device: ${selected.name??'(unnamed)'}`;if(selected.gatt)restoreTrace=traceGatt(selected.gatt,log);}
       if(address){log('Using explicitly entered MAC (value omitted from log)');status('Connecting GATT and discovering services','MAC supplied; the upstream library now owns service selection and notification setup.');return address;}
       if(!fallback){log('Trying upstream advertisement MAC lookup');status('Resolving cube MAC','The upstream advertisement lookup may take up to 10 seconds.');return null;}
-      const entered=window.prompt('Advertisements did not provide a MAC. Enter the cube hardware MAC from Edge Bluetooth Internals:');
-      if(!entered)return null;
-      const value=entered.trim().toUpperCase();if(!/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value))throw new Error('Invalid MAC format');mac.value=value;log('Using fallback MAC (value omitted from log)');return value;
+      log('Advertisement MAC unavailable. No browser prompt used.');
+      throw new Error('Enter the cube MAC in the address field above and press Connect cube again, or choose Local bridge to obtain it natively.');
     });
+    if(cancelRequested){await conn.disconnect();throw new Error('Connection cancelled');}
     connection=conn;log('Driver created and notifications subscribed');
+    element('device').textContent=`Device: ${conn.deviceName}`;
     subscription=conn.events$.subscribe({next:onEvent,error:error=>{log(`Stream error: ${errorText(error)}`);status('Stream error',errorText(error));void stop();},complete:()=>{log('Driver stream completed');cleanup();}});
     status('Connected · waiting for decoded state','Requesting hardware, facelets and battery in maintainer example order.');
     verificationTimer=setTimeout(()=>{if(!ready&&connection){log('No valid decoded snapshot within 12 seconds');status('GATT open · decoded state missing','Possible MAC/protocol/notification failure. Download the log. Disconnect when finished.');}},12000);
@@ -72,7 +82,7 @@ button('connect').onclick=async()=>{
     log(`Connection failed: ${errorText(error)}`);
     await stop();
     status('Connection failed',`${errorText(error)}. Download the log to preserve this attempt.`);
-  }finally{busy=false;controls();}
+  }finally{restoreGatt();busy=false;controls();}
 };
 async function stop(){
   const wasBusy=busy;busy=true;
@@ -80,15 +90,26 @@ async function stop(){
   try{await previous?.disconnect();}catch(error){log(`Disconnect cleanup: ${errorText(error)}`);}
   if(device?.gatt?.connected)device.gatt.disconnect();busy=wasBusy;controls();
 }
-button('disconnect').onclick=async()=>{log('Manual disconnect');await stop();status('Disconnected','No automatic reconnection. The cube may return to sleep.');};
+button('disconnect').onclick=async()=>{cancelRequested=true;log('Manual disconnect / cancel');await stop();status(busy?'Cancellation requested':'Disconnected',busy?'The selected GATT link was closed. Waiting for the browser operation to settle; no new attempt will start automatically.':'No automatic reconnection. The cube may return to sleep.');};
 button('refresh').onclick=()=>void requestState().catch(error=>{log(`Request failed: ${errorText(error)}`);status('Request failed',errorText(error));});
 button('clear').onclick=()=>{lines=[];moves=[];turns=0;lastSerial=null;element('log').textContent='';element('moves').textContent='';element('last-move').textContent='—';element('move-info').textContent='Waiting for decoded MOVE events';element('count').textContent='Turns received: 0';};
 button('export').onclick=()=>{
   const text=['GAN BLE standalone lab · gan-web-bluetooth 3.0.2',`Browser: ${navigator.userAgent}`,...lines].join('\n');
   const url=URL.createObjectURL(new Blob([text],{type:'text/plain'})),a=document.createElement('a');a.href=url;a.download='gan-ble-lab.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-const poll=setInterval(()=>{element('link').textContent=`GATT: ${device?device.gatt?.connected?'connected':'disconnected':'not selected'}`;},250);
+const poll=setInterval(()=>{element('link').textContent=transport.value==='bridge'?`Native link: ${connection?'connected through bridge':'not connected'}`:`GATT: ${device?device.gatt?.connected?'connected':'disconnected':'not selected'}`;controls();},250);
 window.addEventListener('pagehide',()=>{clearInterval(poll);if(device?.gatt?.connected)device.gatt.disconnect();});
 log(`Lab loaded. Web Bluetooth ${navigator.bluetooth?'available':'unavailable'}. No connection attempted.`);
+log(`Browser: ${navigator.userAgent}`);
+transport.onchange=()=>{element('native-controls').hidden=transport.value!=='bridge';status('Transport selected',transport.value==='bridge'?'Press Scan native Bluetooth when ready. This bypasses browser Bluetooth; the local bridge must be running.':'Direct upstream Web Bluetooth with connect/service timing observations; no retries.');};
+button('scan').onclick=async()=>{
+  if(busy||connection)return;busy=true;controls();log('User requested native scan');status('Scanning native Bluetooth','Scanning for 5 seconds through the local bridge…');
+  try{
+    const devices=await scanBridge();bridgeDevices.replaceChildren(new Option('Select a cube',''));
+    for(const found of devices)bridgeDevices.add(new Option(`${found.name} · ${found.rssi} dBm${found.mac?' · address detected':''}`,found.id));
+    log(`Native scan found ${devices.length} cube(s)`);status(devices.length?'Select a cube, then Connect cube':'No cubes found','Native scan finished; no device has been connected.');
+  }catch(error){log(`Native scan failed: ${errorText(error)}`);status('Native scan failed',errorText(error));}
+  finally{busy=false;controls();}
+};
 window.addEventListener('unhandledrejection',event=>log(`Unhandled decoder/runtime rejection: ${errorText(event.reason)}`));
 window.addEventListener('error',event=>log(`Runtime error: ${event.message}`));

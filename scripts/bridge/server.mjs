@@ -14,7 +14,7 @@ export function createBridge(transport,{port=2015}={}) {
   const fail=error=>{publish({type:'BRIDGE_ERROR',message:error.message});void disconnect().catch(()=>{});};
   const server=createServer(async(req,res)=>{
     const origin=req.headers.origin;
-    const allowed=new Set((process.env.CUBE_BRIDGE_ORIGINS??'http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://localhost:4173').split(','));
+    const allowed=new Set((process.env.CUBE_BRIDGE_ORIGINS??'http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:5174,http://localhost:5174').split(','));
     if(![`127.0.0.1:${server.address()?.port}`,`localhost:${server.address()?.port}`,...Array.from(allowed,o=>new URL(o).host)].includes(req.headers.host) || origin && !allowed.has(origin)){
       res.writeHead(403);res.end('Origin refused');return;
     }

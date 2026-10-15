@@ -13,7 +13,7 @@ Install Java 17+ first. The launcher downloads the pinned official TNoodle-WCA 1
 
 ## Practice
 
-For isolated hardware debugging, run `npm run test:ble` and open **http://127.0.0.1:5174/** in Edge. The [temporary BLE lab](./tools/ble-test/README.md) shows raw moves, serials, timestamps, battery, facelets and downloadable logs using the GAN library directly. It does not load the trainer or its GATT retry wrapper. See the [i Carry 4 research](./docs/ICARRY4_BLE_RESEARCH.md) for reported Gen3 support and verification limits.
+For isolated hardware debugging, run `npm run test:ble` and open **http://127.0.0.1:5174/**. The [temporary BLE lab](./tools/ble-test/README.md) shows raw moves, serials, timestamps, battery, facelets and downloadable logs. Direct mode uses the GAN library with transparent GATT timing logs and no retries; Local bridge uses native Bluetooth via `npm run bridge`. It does not load the trainer. See the [i Carry 4 research](./docs/ICARRY4_BLE_RESEARCH.md) for reported Gen3 support and verification limits.
 
 1. Start with a solved cube and choose the matching up/front solving frame.
 2. Browse F2L / OLL / PLL sections, select preferred alternates, and add individual algorithms or the visible section to a training session. Choose balanced cycles or adaptive weighting, then start training.

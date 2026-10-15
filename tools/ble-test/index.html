@@ -12,10 +12,13 @@
   <p>Standalone connection and move readout · gan-web-bluetooth 3.0.2</p>
   <p class="small">Close the trainer's cube connection and other cube apps first. This page connects only when you press Connect. No background scanning or reconnect loop.</p>
   <section class="panel">
+    <label for="transport">Connection method</label>
+    <select id="transport" style="font:inherit;padding:10px;margin:6px 0 14px;background:#222936;color:inherit;border-radius:8px"><option value="web">Direct Web Bluetooth · traced reference path</option><option value="bridge">Local bridge · native Bluetooth</option></select>
+    <div id="native-controls" hidden><button id="scan">Scan native Bluetooth</button> <select id="bridge-devices" aria-label="Native cube" style="font:inherit;padding:10px;background:#222936;color:inherit"><option value="">Select a cube</option></select><p class="small">Start npm run bridge first. Scans only when you press Scan. Bypasses the browser's Bluetooth stack.</p></div>
     <label for="mac">Cube MAC address (optional if advertisements provide it)</label>
     <input id="mac" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false" maxlength="17">
     <div class="controls"><button id="connect" class="primary">Connect cube</button><button id="disconnect" disabled>Disconnect</button><button id="refresh" disabled>Request state & battery</button><button id="export">Download log</button></div>
-    <p class="small">Edge or Chrome required. The MAC is the cube's hardware address, not the browser's device ID. An entered address stays in this tab's memory only.</p>
+    <p class="small">Direct mode requires Edge/Chrome Bluetooth support. If automatic MAC lookup fails, enter it above and reconnect; no popup prompt is used. Local bridge obtains the address natively when available. An entered address stays in this tab's memory only.</p>
   </section>
   <section class="panel status" aria-live="polite"><div id="status">Idle · no connection attempted</div><p id="detail">Turn Bluetooth on only when you are ready to test.</p></section>
   <div class="grid">
